@@ -1,0 +1,6 @@
+# Run outputs (the panel writes reviews to <outDir>, default <baseDir>/keri-review-<milestone>;
+# the in-repo fallback is runs/). Reviews are artifacts of a run, not part of the tooling.
+runs/
+reviews/
+*.tmp
+.DS_Store
