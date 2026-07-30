@@ -1,7 +1,7 @@
 export const meta = {
   name: 'keri-review-panel',
   description: 'Adversarial multi-persona review of a KERI/ACDC/CESR DESIGN proposal (spec change, discussion, PR, worked example, or pasted prose). Reasons in KERI\'s own terms via keri-doctrine.md; dedupes by dedupe_key and adjudicates dispositions. args is an OBJECT (see whenToUse).',
-  whenToUse: 'For a multi-lens review of a KERI/ACDC/CESR design argument. ARGS (object): proposal = the design argument — a URL (GitHub PR/discussion), a file path, or pasted text / an email thread (required). targets = array of repo/spec pointers the proposal touches (e.g. ["/…/keripy","/…/signify-ts"]) that personas cross-reference to verify machine-behavior claims; relative pointers resolve against baseDir. baseDir = the launching session absolute cwd (for relative targets/outDir). personas = array of names/prefixes (SEC,KRT,PRV,SPC,SKP,GOV,CSR), the string "auto" (topic-dispatch picks load-bearing lenses from the proposal), or omitted (DEFAULT four: SEC,SKP,SPC,GOV). Optional: milestone (run label), outDir (where reviews are written; default <baseDir>/keri-review-<milestone>), concurrency (default 3), effort, model, overrides = {PREFIX:{effort,model}}, verify ("off"|"default"|"all"). Writes per-persona reports + one synthesis to <outDir>/reviews/ and returns the triaged queue.',
+  whenToUse: 'For a multi-lens review of a KERI/ACDC/CESR design argument. ARGS (object): proposal = the design argument — a URL (GitHub PR/discussion), a file path, or pasted text / an email thread (required). targets = array of repo/spec pointers the proposal touches (e.g. ["/…/keripy","/…/signify-ts"]) that personas cross-reference to verify machine-behavior claims; relative pointers resolve against baseDir. baseDir = the launching session absolute cwd (for relative targets/outDir). personas = array of names/prefixes (SEC,KRT,PRV,SPC,SKP,GOV,CSR), the string "auto" (topic-dispatch picks load-bearing lenses from the proposal), or omitted (DEFAULT four: SEC,SKP,SPC,GOV). Optional: milestone (run label), outDir (where reviews are written; default <baseDir>/keri-review-<YYYY-MM-DD>-<milestone>), concurrency (default 3), effort, model, overrides = {PREFIX:{effort,model}}, verify ("off"|"default"|"all"). Writes per-persona reports + one synthesis to <outDir>/reviews/ (outDir defaults to <baseDir>/keri-review-<YYYY-MM-DD>-<milestone>, so runs never overwrite each other) and returns the triaged queue.',
   phases: [
     { title: 'Preflight', detail: 'normalize the proposal (fetch URL / read file / accept text), resolve the panel prompts dir, validate targets' },
     { title: 'Scope', detail: 'topic-dispatch lens selection (only when personas: "auto")' },
@@ -78,11 +78,12 @@ async function runChunked(items, size, fn) {
 phase('Preflight')
 const targetsForAgent = TARGET_POINTERS.map((t) => (t.startsWith('/') || !BASE_DIR) ? t : `${BASE_DIR}/${t}`)
 const PREFLIGHT_SCHEMA = {
-  type: 'object', required: ['short_name', 'normalized_proposal', 'proposal_kind', 'prompts_dir', 'targets'], additionalProperties: false,
+  type: 'object', required: ['short_name', 'normalized_proposal', 'proposal_kind', 'prompts_dir', 'targets', 'today'], additionalProperties: false,
   properties: {
     short_name: { type: 'string' },
     normalized_proposal: { type: 'string' },
     proposal_kind: { enum: ['url', 'file', 'text'] },
+    today: { type: 'string' },
     prompts_dir: { type: ['string', 'null'] },
     targets: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['pointer', 'resolved', 'kind', 'exists'], properties: { pointer: { type: 'string' }, resolved: { type: ['string', 'null'] }, kind: { type: 'string' }, exists: { type: 'boolean' } } } },
   },
@@ -100,7 +101,8 @@ const pf = await agent(
   `   path as prompts_dir (it holds keri-doctrine.md, review-house-style.md, orchestrating-reviews.md, personas/). If the symlink is missing, prompts_dir = null.\n\n` +
   `3. VALIDATE TARGETS. For each of these pointers ${JSON.stringify(targetsForAgent)}: run \`git -C "<p>" rev-parse --show-toplevel\` ` +
   `   (if it is a git repo, resolved = toplevel, kind = "code-repo" or "spec-repo" by content); else if the path exists, resolved = it, kind = "dir"/"file"; else exists=false. Run shell under \`nice -n 19 ionice -c 3\`.\n\n` +
-  `Return {short_name, normalized_proposal, proposal_kind, prompts_dir, targets:[{pointer, resolved, kind, exists}]}.`,
+  `4. DATE THE RUN. Run: date +%F ; return it as "today" (YYYY-MM-DD). It names this run's output directory, so runs never collide.\n\n` +
+  `Return {short_name, normalized_proposal, proposal_kind, prompts_dir, targets:[{pointer, resolved, kind, exists}], today}.`,
   { label: 'preflight', phase: 'Preflight', schema: PREFLIGHT_SCHEMA },
 )
 if (!pf) return { error: 'preflight failed' }
@@ -109,7 +111,12 @@ if (!PROMPTS_DIR) return { error: 'could not locate panel prompts. Run ./install
 const shortName = pf.short_name || 'proposal'
 const NORMALIZED = pf.normalized_proposal
 const goodTargets = (pf.targets || []).filter((t) => t.exists)
-const OUT = ((args && args.outDir) || (BASE_DIR ? `${BASE_DIR}/keri-review-${milestone}` : `${PROMPTS_DIR}/runs/${milestone}`)).replace(/\/+$/, '')
+// A proposal review is not owned by any single target repo, so it gets its own run directory
+// rather than writing into a target's reviews/ — the named exception in bakobo/dev
+// standards/reviews.md. The <YYYY-MM-DD>-<milestone> naming is the same either way.
+const RUN_DATE = pf.today
+const RUN_DIR_NAME = `${RUN_DATE}-${milestone}`
+const OUT = ((args && args.outDir) || (BASE_DIR ? `${BASE_DIR}/keri-review-${RUN_DIR_NAME}` : `${PROMPTS_DIR}/runs/${RUN_DIR_NAME}`)).replace(/\/+$/, '')
 const reviewsDir = `${OUT}/reviews`
 const targetsBlock = goodTargets.length ? goodTargets.map((t) => `${t.resolved} (${t.kind})`).join(', ') : '(none supplied — reason from the proposal + doctrine; flag where a code/spec check is needed but unavailable)'
 log(`Proposal "${shortName}" (${pf.proposal_kind}); prompts ${PROMPTS_DIR}; targets: ${targetsBlock}; out ${reviewsDir}`)
@@ -245,7 +252,8 @@ const PERSIST_SCHEMA = { type: 'object', required: ['path'], additionalPropertie
 const persisted = await agent(
   `Write the keri-review-panel synthesis report, then return its path. No source edits, no git add/commit.\n` +
   `Create "${reviewsDir}" if needed, then Write "${reviewsDir}/keri-review-panel-${milestone}.md" with:\n` +
-  `1. A header: proposal "${shortName}", targets [${targetsBlock}], milestone "${milestone}", today's date (run: date +%F), personas (${PERSONAS.map((p) => p.prefix).join(', ')}), counts (${raw.length} raw, ${reconciled.length} after dedupe, ${blockers.length} blockers; verification: ${refuted.length} refuted).\n` +
+  `1. A header: proposal "${shortName}", targets [${targetsBlock}], milestone "${milestone}", date ${RUN_DATE}, personas (${PERSONAS.map((p) => p.prefix).join(', ')}), counts (${raw.length} raw, ${reconciled.length} after dedupe, ${blockers.length} blockers; verification: ${refuted.length} refuted).\n` +
+  `1b. Immediately after the header, on its own line, exactly: "status: untriaged — ${blockers.length} blocking, ${reconciled.length} total." This line is the triage marker; a later session updates it in place as findings are dispositioned.\n` +
   `2. "## Executive verdict" verbatim:\n${summary}\n` +
   `3. "## Findings" — a table sorted CRITICAL->LOW: id | severity | confidence | layer | objective | disposition | reported_by | title.\n` +
   `4. "## Per-persona reports" — bullet list of these sibling files: ${personaReports.join(', ')}.\n` +
