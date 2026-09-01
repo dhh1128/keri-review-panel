@@ -9,6 +9,9 @@
 - [ACDC & Verifiable Data](#acdc--verifiable-data)
 - [Governance, Ecosystems & Interop](#governance-ecosystems--interop)
 - [07 — Shibboleths and Anti-Patterns](#07--shibboleths-and-anti-patterns)
+- [Presentation Architectures & the IPEX Disclosure Model](#presentation-architectures--the-ipex-disclosure-model)
+- [KRAM & Request Authentication](#kram--request-authentication)
+- [Presentation Registries & Issuee-Side Detectability](#presentation-registries--issuee-side-detectability)
 
 ---
 
@@ -962,6 +965,16 @@ Terminology a reviewer should keep straight: ACDCs generically are **Verifiable 
 
 The **anti-phone-home stance** is a deliberate rejection of OCSP/CRL. A **Registrar** (under the Issuer) maintains and publishes the registry; an **Observer** (under one or more Validators) caches the registry so Validators "validate the state... without exposing a point of validation (PoV)." "It can mask the usage of a given ACDC from the Issuer." Observer-to-Registrar sync happens on state changes, NOT at the point of validation, which "protects against forced validator-to-issuer correlation of ACDC usage, i.e., no forced phone home validation" (§TEL Registrars and TEL Observers, L1693). Race conditions on rare state changes are handled by "timed grace periods on revocations" (L1695). In Hardman's framing, "A registry consulted at verification time is a phone-home in disguise" (`sda.md §7`); the corollary invariant is that "verification must succeed from the credential and key-state alone, and any registry or log is an issuance-time and audit-time convenience, never a verification-time dependency."
 
+**The split is a governance decision, not a caching optimization** — a point the spec never makes but Sam states directly. At KERIcon 2026 he presented Registrar/Observer as a deliberate replay of the witness/watcher structure one layer up: "notice that this models the witness watcher governance structure. So, we learned a lesson. We shouldn't have shared governance. So, we have witnesses that are controlled by controllers, watchers that are controlled by verifiers. We split the verification between two places. We do the same thing with ACDCs" (*The Digital Identity Tradespace*; `raw/14`). The Observer's remit is correspondingly thin — "All our observer is doing is it's keeping track of the registry state" — and it is layered on, not substituted for, KEL assurance: asked why Observers and watchers must be separate components, "they have different purposes... They depend on watchers, but they aren't watchers" (*State of the KERI Suite*). The cleanest one-line distinction in the corpus is from the same Q&A: "watchers watch the KEL... looking for duplicity in your KEL. Observers are watching the state of issuances that are anchored to the KEL... it's a TEL observer." **Caution on provenance:** these are hand-edited auto-captions, `[SAM-DIRECT]` in substance but not verbatim in wording — see `raw/14` §0 before quoting any of it to Sam or into a spec issue.
+
+**The split has a proposed third leg.** Registrar (Issuer-controlled) and Observer (verifier-controlled) leave the Holder as the one party to a transaction running no state infrastructure of its own. A *presentation registry* — an Issuee-controlled blindable state registry that a `grant` must be anchored in — closes that, giving the Issuee the same detect-and-recover capability the Issuer already has against impersonation. It is pre-normative and unimplemented; see `bible/10-presentation-registries.md`, and note that its origin document calls it an *Issuee usage registry* (keripy #1095).
+
+**Bulk updates are a privacy requirement, not a performance one.** The spec mentions "optimized batch synchronization" in a performance register (L1695); the talks make batching load-bearing. "if you update it instantly, then the observer could correlate a change to some registries and not others. But if all the registries, 100% of them update at the same clock time... then there's [synchronization] in the time of update" (*Tradespace*), generalized to a design law in the same talk: "if you want to make it so that it's not statistically correlatable, you have to do it in a bulk or herd privacy protected way." The batch window closes correlation in both directions — backward from a point of validation to the state change that preceded it, forward from a state change to the validations that follow. **The residual weakness is named by Sam himself,** and a reviewer should quote it rather than overclaim: "if an observer is malicious and the issuer is malicious, they can collude... but there's no phone home here. The issuer can't force an observer... There's no technical thing that makes it impossible in this, but what it does is it means that there's no easy way for them to do it" (*Tradespace*). The claim is that collusion is unforced, out-of-band and legally repressible — the same technical-plus-legal posture as the rest of the ACDC privacy story (`bible/06` §three-party exploitation), not a cryptographic impossibility.
+
+**Usage registries — where presenter-side compromise detection actually lives, and the thing most often misattributed to Observers.** Observers cache state; they detect nothing. Detection of a *presenter's* key compromise comes from a second registry controlled by the issuee, in which every presentation is anchored: "if somebody steals my private keys as a presenter, I know that they stole them because the only way that they can gain access is to anchor it in my registry that I control" (*The Future of KERI*). The verifier then checks two registries, the issuer's and the presenter's, "so that both the issuer and the user can detect if either one has been compromised and the verifier knows it." It is opt-in and it costs ephemerality — "Makes the presentation less ephemeral" — and it is the mirror of the issuer-side anti-forgery story at L1687-1689, applied at the other end of the presentation. **Tier this carefully: it is talk-only.** The sole trace in the specification is the `rd` field description listing registry kinds as "Issuance and/or revocation, transfer, retraction, or usage registry" (§Top-Level Fields, L48); there is no usage-registry section, and Sam's own framing of it is a novelty claim ("a new thing that nobody else does").
+
+**Implementation status (2026-09-01): neither component exists.** `keri-foundation/observer` and `keri-foundation/registrar` are public placeholder repos holding a LICENSE and a one-line README; `src/keri/acdc/registraring.py` in keripy is a docstring-only stub Sam created 2026-07-02, and keripy has no observer module at all. What is implemented is the layer beneath — the blindable `bup` update event and `BlindState` structures (`core/structing.py`, `acdc/messaging.py` `blindate()`) and the `RegBaser`/`WebRegBaser` registry stores. Nothing anywhere specifies the Observer wire protocol, how a validator discovers or pools Observers, or how the batch-window-versus-revocation-latency trade should be set. A reviewer should treat Registrar/Observer as **architecturally committed and operationally unbuilt**, and should not accept "the Observer handles that" as an answer to a live design question.
+
 **Binding ACDC state to issuer key state** is the core anti-forgery doctrine, and it is where ACDC most sharply corrects the W3C-VC/SD-JWT prior. ACDCs are "not directly signed by the Issuer... bound to the Issuer's Key State... and the Issuer's Key State is signed. This enables the Key State of the Issuer to change independently of the ACDC state" (§Binding to Key State, L1673). The explicit anti-pattern: in "other verifiable credential schemes, where the credentials are signed directly... a key rotation forces all the credentials signed with a given set of keys to be revoked; otherwise, a key compromise would enable the compromiser to issue... forged [credentials]" (L1675). This is the *retrograde attack* defense (`was.md`): a bare signature "provides no assurance that the private key was used to sign the message at that time" (NIST SP 800-102, via `keri-primer.md §3.3`), so ACDC uses *anchored* rather than *paired* signatures — validity is judged against issuer key state "AS OF its KEL anchor's sequence position, not current key state or wall-clock" (keripy invariant H1, `30-invariants.md`; enforced in `Tever.verifyAnchor`).
 
 **A serious caveat, flagged as a keripy recon hypothesis (L15, HIGH severity, medium confidence).** The credential `Verifier.processCredential` checks registry existence, TEL state, freshness, schema, and chain edges, but recon "found no call to `Tever.verifyAnchor`" in that path — anchor validation appears to happen only when a TEL *event* is ingested by `Tevery`, "not when a credential + proof is verified." If confirmed, "a credential presented with a forged `(seqner, saider)` proof could pass schema + TEL-state checks without the anchor being confirmed against the issuer's actual KEL at that sn — undermining invariant H1" (keripy-knowledge `31-landmines.md` L15). A reviewer relying on anchor-time-of-signing verification must confirm the ingest path actually ran `verifyAnchor` on the events in question; do not assume the credential-verification call re-checks it.
@@ -1573,3 +1586,1061 @@ A reviewer inoculated against outsider tells must not swing to the opposite fail
 **The genuinely surviving residuals** — the outsider critiques that do *not* dissolve on reframing — are, per the security-analysis corpus, all about ecosystem maturity, never about the protocol: the observer/watcher infrastructure is immature; the "super watcher" pattern (as at GLEIF) reintroduces "a centralized trust dependency that KERI was designed to avoid" (`cr-ad-trust.md` §5; DG-C05); the formal literature is thin (the strongest analysis is "a 2025 ETH Zürich Master's thesis... not peer-reviewed," wtbo.md §5); and KERI lacks the legal standing (eIDAS) X.509 enjoys — "a gap of legal recognition, not of technical capability" (wtbo.md Note [c]). KERI's advocates frame these as "constraints of *youth*, not of *architecture*" (wtbo.md §6) — which is itself a claim a reviewer should treat as an assertion to be tested against trajectory, not a proven fact.
 
 The disciplined reviewer, then, holds two things at once: the outsider tells in §§2-11 are category errors that should be caught and reframed, *and* the residuals in this section are legitimate and should be pressed. Confusing the two — dismissing a real maturity critique as a category error, or accepting a category error as a real critique — is the failure mode this entire section exists to prevent. The tell that a reviewer has internalized the doctrine is not that they praise KERI, but that they can state, for any given critique, whether it survives objective-function alignment — and cite why.
+
+---
+
+# Presentation Architectures & the IPEX Disclosure Model
+
+> **Staleness warning — read this before you rely on anything below.**
+>
+> This chapter covers the fastest-moving, least-settled area of the KERI/ACDC design
+> space. Between 2026-07-25 and 2026-08-19 the presentation model was revised five times
+> in public, twice in ways that superseded earlier proposals outright, and the pace has
+> not slowed. This chapter is a synthesis as of **2026-08-25**; it is our best current
+> reading, not a stable reference.
+>
+> **Before you build an argument on it, scan for newer intel.** In order of cost:
+> WebOfTrust/keripy discussion [#1627](https://github.com/WebOfTrust/keripy/discussions/1627)
+> and its comment stream, which is where the architecture-level thinking lands; then
+> [#1613](https://github.com/WebOfTrust/keripy/discussions/1613), which its author has
+> revised in place at least five times (v1.0 → v1.5) *without* changing the post date, so
+> a version you read last week may not be the version there now; then the comment streams
+> of the open keripy and `kswg-acdc-specification` PRs listed in §14, where the settled
+> answers to several questions below are recorded only as review comments.
+>
+> Two specific traps. First, **a discussion body is a moving target** — cite the quote,
+> not the line, and re-read before you rely. Second, **normative status flipped recently
+> for a large block of this material**: Disclosure Paths and the `dp` field were prose in
+> a discussion in July and are normative in the ACDC v1.1 branch as of August. Check which
+> side of that line a claim sits on before repeating this chapter's tier markers.
+
+**Thesis.** An ACDC presentation is not the disclosure of a credential. It is the
+disclosure of a *directed acyclic graph* of credentials, normalized so that the graph has
+exactly one source node — the origin — and negotiated by naming paths into that graph
+rather than by naming attributes. That single structural commitment is what lets ACDC
+absorb the other verifiable-credential architectures as special cases: a one-node DAG is a
+portable data lake, and a bespoke origin node with N edges is a credential soup that has
+been converted into something cryptographically rigid. Everything hard about ACDC
+presentation follows from a second observation, which the graph structure does *not*
+answer: a DAG commits to *data*, and a presentation must also establish *who is
+presenting, right now, and with what authority*. That is the authentication-factor
+problem, and it is where the current design is least settled — freshness (KRAM),
+multiple endorsement, anchoring (`ax`), tethering, and presentation registries are all
+answers to it, all proposed within the last six weeks, and none of them normative in any
+specification today. This chapter separates the three tiers rigorously, because the
+single most common error in this area is quoting a design discussion as though it were
+the spec.
+
+## 0. How to read this chapter: three tiers, marked
+
+Every substantive claim below carries one of three tier markers. They are not decoration;
+they are the point of the chapter.
+
+- **[N]** — **Normative.** In the text of a published specification branch. Cited to
+  `§Section` plus a quoted span. A validator that ignores it is non-conformant.
+- **[P]** — **Proposed.** Stated in a GitHub discussion, a draft PR, or a maintainer
+  comment, and not in any spec. May be well-reasoned and may be where things are heading;
+  is not binding on anyone, and in several cases below has already been superseded once.
+- **[K]** — **keripy behavior.** What the reference implementation does at
+  `upstream/main` @`42db8991b` (2026-08-25). Note that **[K]** is frequently *neither*
+  **[N]** nor **[P]** — it is sometimes ahead of the spec, sometimes behind it, and
+  occasionally at odds with both.
+
+Where the tiers disagree, this chapter says so rather than reconciling them. A claim with
+no marker is this chapter's own synthesis and should be treated as the weakest kind of
+evidence here.
+
+Source revisions pinned for this chapter: ACDC spec `v1.1` branch @`6a2a89c` (2026-08-25);
+KERI spec `main` @`be618e7` (2026-08-23); Dossier spec @`6037adf` (2026-08-12); keripy
+`upstream/main` @`42db8991b` (2026-08-25). Line numbers are hints; the quoted spans are
+the durable anchor (see the citation-durability convention in `keri-doctrine.md`).
+
+## 1. The four presentation architectures
+
+The taxonomy is from discussion #1627, "ACDC Presentation Architectures" (SmithSamuelM,
+2026-08-19). It is a framing document rather than a proposal for most of its length, and
+the framing is useful independent of whether one accepts its conclusions. **[P]**
+
+**Portable Datalake.** One document, nested blocks, all attributes about one subject from
+one issuer; the holder discloses a subset at presentation time, often by checking boxes
+against an array. This is mDoc/mDL and mainstream W3C VC. Its advantage is simplicity.
+Its named disadvantages: it cannot express delegation or a delegation chain; everything
+must come from exactly one issuer, "Not one root-of-trust with a distributed set of
+hierarchically delegated Issuers, but one and only one Issuer"; the issuer must pull from
+every relevant database to issue it, so the architecture pushes issuers toward exactly the
+consolidated data lake that maximizes breach blast radius; and reissuance is forced at the
+periodicity of the most rapidly changing attribute in the document.
+
+**Credential Soup.** Attributes drawn from several credentials, potentially several
+issuers and several issuees, assembled at presentation time. This was Sovrin's model. It
+permits issuer-side database partitioning and reissuance tuned to each attribute's
+dynamism. Its costs are that presentation negotiation becomes ambiguous (an attribute may
+be sourced from any of several credentials), that each distinct source needs its own fresh
+proof of control, that proving several issuee AIDs represent the same party needs a
+mechanism the soup does not supply, and that a soup "cannot support delegation in any
+normative secure way. At least not as a cryptographically verifiable data structure."
+
+**Verifiable DAG.** ACDC's default. Edges carry properties, each node is separably
+authenticable, and each edge carries a cryptographic digest of the node it points to. The
+consequence: "A verifiable cryptographic commitment to the origin ACDC of that DAG is a
+verifiable commitment to every node in the DAG," giving the graph Merkle-tree-like
+properties. Typically only the issuer or issuee of the *origin* needs a fresh
+authentication factor. Delegation is native. Forgery "must be in totality, and not
+piecemeal," where a soup can be forged piecemeal. The costs are verification complexity
+and a reissuance cascade discussed in §11.
+
+**DAG Soup.** Several disconnected DAGs presented in one exchange, each with its own
+origin, requiring a multiply-endorsed grant. Most general, most complex, and the subject
+of #1627's only concrete proposal (§10).
+
+**The load-bearing claim of the taxonomy** is that ACDC subsumes the other two: "the ACDC
+DAG, as a special case, can mimic either a portable data lake or a credential soup as
+needed." A single ACDC with a selectively disclosable aggregate section is a portable data
+lake. A bespoke origin ACDC with N edges is a credential soup that has been given a
+verifiable spine. This is well-supported by the normative structure in §2-§3 and is, in
+this chapter's judgment, the strongest argument in #1627.
+
+## 2. The normalized structure: one DAG, one origin
+
+This is the structural commitment everything else rests on, and it is **[N]** as of the
+v1.1 branch.
+
+An ACDC is not a node; it is a *graph fragment*. "It consists of a near-side node and that
+node's outgoing Edges, which its Edge Section contains. An ACDC holds no Edges incoming to
+its own node, only outgoing ones; its incoming Edges belong to other fragments" (ACDC
+§Disclosure Paths → DAG of ACDCs, ~L1815). A source node "has no incoming Edges. It MUST
+either have no Edges at all or only outgoing Edges."
+
+The normalization: "An issuance or presentation exchange discloses a single DAG of
+connected ACDC graph fragments. That DAG MUST have exactly one source node, called the
+origin node." And where the material to be conveyed is not already connected, "a DAG MUST
+be formed by issuing a bespoke ACDC whose node is the origin, with Edges chaining back to
+every other ACDC the exchange includes" (~L1815-1821). **[N]**
+
+Two consequences an adversarial reviewer should hold onto.
+
+First, **the origin is a source, not a root of authority**, and these run in opposite
+directions. Edges point near→far and carry a digest of the far node, so authority flows
+*toward* the origin from the far nodes, while commitment flows *from* the origin to
+everything reachable. #1627 uses "root of the DAG" for the far-side, deepest node — "if a
+given ACDC is the root of the DAG, and that ACDC's attributes change and it must be
+reissued, then every branch that sinks into the ACDC must be reissued" — which is the
+correct *cascade* direction but the opposite end of the graph from the *origin*. The
+terms "origin" and "root" name opposite ends here. Anyone reading #1627 alongside the spec
+should translate rather than assume.
+
+Second, **the DAG is well-ordered and therefore linearizable**. Field maps inside an ACDC
+MUST be insertion-ordered, arrays are ordered, and each Edge Section is an ordered field
+map, so "A well-ordered DAG with a single source node linearizes into a unique,
+reproducible order" (§Ordering, ~L1829). Breadth-first from the origin is the chosen
+order, "because in some applications, such as a dossier using joint issuance, the
+joint-issued ACDCs fall together in breadth-first order and scatter in depth-first."
+This reproducibility is what lets `dp` identify an ACDC by position rather than by SAID
+(§4), which is in turn what keeps a disclosure request from introducing correlators of its
+own.
+
+## 3. The bespoke origin ACDC
+
+A bespoke (disclosure-specific) ACDC is issued by the Discloser, for one exchange,
+specifically to become the origin. It is **[N]** and has been for some time: "A given
+Discloser issues its own bespoke ACDC referencing some other ACDC via an Edge. This means
+that the normal validation logic and tooling for a chained ACDC can be applied without
+complicating the presentation exchange logic" (ACDC §Disclosure-specific (Bespoke) Issued
+ACDCs, ~L2061). The spec names the rich-presentation use directly: it "effectively enables
+a type of rich presentation or combined disclosure where multiple ACDCs MAY be referenced
+by edges in the bespoke ACDC... without requiring any new tooling."
+
+Its two standard jobs are to carry presentation-specific contractual terms in its rule
+section — the spec's worked example carries an anti-assimilation clause and a
+one-time-purpose clause (~L2069-2114) — and to name the Disclosee as its Issuee, so that
+"Signing the agreement to the offer of that bespoke ACDC consummates a contract between the
+named Issuer and the named Issuee."
+
+**#1627 adds a third job and a name for it: the bespoke origin as *recipe*.** **[P]** The
+argument is that a set of unchained ACDCs issued by one root-of-trust to one issuee — the
+SEDI shape, State → citizen — looks like a soup but is a degenerate one, since "All the
+ingredients came from the same cupboard." A bespoke origin with one edge per ingredient
+converts it into a DAG at presentation time. The origin "does not need to be anchored or
+use a registry, so it's simple... It merely needs to be signed and have attached
+signatures because it's a one-time use ACDC."
+
+The interoperability move is the interesting part: **the bespoke ACDC is one-time-use but
+its schema is not.** "The schema of the bespoke ACDC, however, is not one-time use. It acts
+as a permanent recipe for the soup... an EGF can define the schema of the bespoke ACDC for
+all its seminal use cases." Since type-is-schema and the schema SAID is a
+cryptographic commitment, an EGF-published recipe schema gives tooling a fixed target
+without fixing the instances.
+
+**A correction that matters, because the sentence will be quoted.** #1627 justifies the
+edge operator on a recipe edge as follows: "the Issuer of the origin ACDC (recipe) is the
+Issuee of the ACDCs on the far side of each of its edges. Therefore, each edge from the
+recipe ACDC can use the I2I edge operator." That is right, and it is exactly the `I2I`
+relation (§5). The restatement immediately following it — "the Issuer of the recipe is the
+citizen AID, and the Issuer of all the far node ACDCs is also the citizen AID" — is wrong:
+the far nodes are issued by the State and the citizen is their *Issuee*. The first
+sentence is the correct one; the second contradicts it and would, if implemented, describe
+a set of self-issued credentials.
+
+## 4. Disclosure paths: the `dp` field
+
+`dp` is how a disclosure is *requested*. It became normative in the v1.1 branch after
+evolving through discussions #1542 → #1512 → #1549. This is the single largest block of
+material that changed tier recently. **[N]**
+
+**It is not an ACDC field.** "The `dp` field is not an ACDC field. It appears in the
+messages that negotiate a disclosure, not in the ACDCs that are disclosed. It is therefore
+not reserved as an ACDC field label" (§Disclosure Paths, ~L1811). This matters for §10.
+
+**Shape.** The value is "a list of tuples... of the form
+`(ACDCSchemaSAID, PathPrefix, [paths])`," one tuple per ACDC of the DAG, and "In a
+serialization that has no distinct tuple type, such as JSON, each tuple MUST be
+represented as a three-element array" (~L1881). The three-element form is the settled one;
+a two-element form appears in #1549's body and was superseded by its own comment stream on
+2026-08-04.
+
+**Why a list and not a field map** — this is the design decision most directly at stake in
+§10: "A list of tuples is used rather than a field map keyed by Schema SAID so that a
+Schema SAID MAY appear more than once. Two ACDCs of the same type, that is, of the same
+Schema SAID, MAY appear in one DAG, and a field map could not tell them apart" (~L1883).
+
+**Path syntax.** A path beginning with `/` is DAG-absolute, rooted at the origin's top
+level; one that does not is ACDC-relative. Edge traversal MUST be DAG-absolute and begins
+`/e`; the hop across an edge to the far ACDC is written with the virtual component `_`,
+so `/e/reports/project/_/a/author` descends the origin's edge section to the `project`
+edge, hops, and lands on the far ACDC's `a/author` (§Traversing Edges, ~L1843). The
+`n` field label is not a path component; `_` stands for the traversal `n` designates.
+
+**Node vs leaf — the hammer and the scalpel.** A path ending in `/` designates a whole
+node and "the full expansion of every branch beneath it"; a path ending in a non-empty
+component designates one leaf "together with whatever nodes along its branch are needed to
+validate the SAIDs on that branch. It requires no sibling branch" (~L1855-1861). The
+top-level `d/` therefore designates a whole ACDC.
+
+**Prefix factoring.** The prefix is the DAG-absolute route to the ACDC the tuple names; it
+"MUST be either the empty string or a DAG-absolute path that both begins and ends with the
+path delimiter." Effective path is prefix ⧺ entry with nothing inserted, and "An entry of
+a path list MUST NOT begin with the path delimiter," which makes the concatenation always
+well-formed (§Path Prefix, ~L1885-1897). With a non-empty prefix, an empty entry `""`
+designates the whole named ACDC; with an empty prefix it designates nothing, and `d/` is
+the shortest way to say "the whole of this one."
+
+**Ordering, and when it stops being sufficient.** Elements MUST appear in breadth-first
+order and "The zeroth element MUST represent the origin node ACDC" (§Identifying Each
+Tuple's ACDC, ~L1899). Where prefixes are non-empty, position is not what identifies a
+tuple, and the list "MAY omit any ACDC from which nothing is requested." The ordering is
+required anyway, on the grounds that any party generating `dp` must linearize the DAG to
+walk it. The exception that forces explicit prefixes: where a schema makes an edge or
+edge-group optional, "a party that knows only the Schema cannot generate a total ordering,
+because a node the Schema allows may be absent from the DAG as issued," so every element
+after the zeroth MUST carry a non-empty prefix.
+
+**Placement.** "where a `dp` field appears in an `apply` or `offer`, it MUST appear in
+that message's query section, `q`, and not in its attribute section, `a`" (§Disclosure
+Paths in `apply` and `offer`, ~L2013). The reasoning is the ReST analogy the `exn` message
+shape already encodes — route is the path, `q` is the query string, `a` is the body, and a
+request for disclosure is a query. **`dp` appears in `apply` and `offer` only. It does not
+appear in a `grant`.**
+
+**Solicited response.** An empty list `[]` in an answering message means "the same paths
+the message it answers asked for"; a differing or unsolicited message MUST NOT carry an
+empty list (~L1915).
+
+**Aggregate-section pathing** is the one genuinely special case. Blinded blocks are array
+elements whose offsets a Disclosee does not know, so a path MAY name a block by its
+uniquely labeled field: `A/over21` and `A/1/over21` designate the same closure. The
+shorthand designates *the block*, not the field, and closes over all of it. It cannot
+reach into nested sub-blocks — `A/over21/issued` "MUST be rejected when expanded" — on the
+grounds that partial disclosure inside selective disclosure is an anti-pattern, and "a
+Schema that calls for it is better rewritten as a DAG of ACDCs" (~L1921-1931).
+
+**[K]** keripy implements none of this. `grep` for `'dp'` across `src/keri/` returns
+nothing; `src/keri/acdc/ipexing.py` builds `apply`/`offer`/`agree`/`grant`/`admit` with no
+disclosure-path concept. The construct exists in the spec and in worked examples
+(`tests/acdc/`) that hand-build the `q` block through `exchange(modifiers=...)`.
+
+## 5. Edges, operators, and edge groups
+
+The presentation model leans on the edge layer in two places: `I2I` closes the bespoke
+recipe (§3), and every proposal to signal multiple endorsement *in the ACDC* rather than
+in the exchange message is a proposal for a new edge-group operator (§8).
+
+**Block discrimination [N].** "An Edge MUST contain a node, `n` field. An Edge-group MUST
+NOT have a node, `n` field" (§Block Types, ~L1065). The Edge Section is itself the
+top-level edge-group. Edge-groups nest to arbitrary depth. Reserved labels are
+`[d, u, o, w]` for a group and `[d, u, n, s, o, w]` for an edge.
+
+**Unary operators [N]** (§Operator `o` field, ~L1196). `I2I` (near issuer MUST be far
+issuee — the delegation link, and the default for a targeted far node); `NI2I` (relaxes
+it; default for untargeted); `DI2I` (near issuer MUST be far issuee *or a delegated AID
+of* far issuee); `E1E` (near *issuee* MUST equal far *issuee*, "an identity relation
+between the two ACDCs' Issuee AIDs [that] places no constraint on either ACDC's Issuer
+AID"); `NOT` (inverts far-node validity). `o` may be a list, and "When multiple unary
+Operators appear in the list, and there is a conflict between Operators, the latest
+Operator among the conflicting Operators in the list takes precedence."
+
+**M-ary operators [N]** on an edge-group: `AND` (default), `OR`, `NAND`, `NOR`, `AVG`,
+`WAVG`. "When the Operator, `o`, field is missing in an Edge-group block, the default
+value for the Operator, `o`, field MUST be the `AND` Operator" (~L1120).
+
+**The operator-token namespace has no registry, and two specs are now writing into it.**
+The Dossier spec @`6037adf` defines four further m-ary edge-group operators for joint
+issuance — `MxN`, `RMxN`, `MxQ`, `RMxQ` — "placed in the operator field (`o`) of an edge
+group within the dossier's edges block, following ACDC operator conventions" (§Threshold
+Operators, ~L364-372). They do not collide with the ACDC set or with the proposed `ME`,
+but nothing *prevents* a collision, and #1555 itself flags the risk in passing ("need to
+confirm no collisions"). Any argument that pivots away from edge operators toward
+exchange-message fields (§10) should weigh this: the operator namespace is a shared,
+unmanaged resource across at least two specifications.
+
+**[K] keripy's operator support diverges from the spec in both directions.**
+`Verifier.UnaryOps = ('I2I', 'NI2I', 'DI2I', 'E1E', 'NOT')` (`src/keri/vdr/verifying.py:41`).
+`E1E` is implemented; `DI2I` and `NOT` are recognized and *fail closed* with a
+`ValidationError` rather than escrowing, on the reasoning that a retry cannot make an
+unsupported operator supported (`verifying.py:446-452`). There is **no m-ary operator
+concept at all**, and the edge-walk at `verifying.py:175` indexes `node["n"]`
+unconditionally, as does `Reger.sources` at `src/keri/vdr/eventing.py:2587` — so a nested
+edge-group raises `KeyError: 'n'` on both paths. **Every proposal built on edge groups is
+therefore unbuildable in keripy today**; PR #1560 is the traversal fix and is open.
+
+One stale comment worth knowing about when reading the code: `verifying.py:40` says "E1E
+is a keripy extension not yet in the spec's normative operator table." As of v1.1
+@`6a2a89c`, `E1E` *is* in the normative table. The code is right and its comment is
+behind.
+
+## 6. Authentication factors: the second problem
+
+The DAG solves data integrity and authority structure. It does not, by itself, establish
+that the party sending the presentation controls anything at the moment of sending.
+Discussion #1613, "Authentication Factors in IPEX," is the systematic treatment. All of it
+is **[P]**; none of it is in any spec.
+
+**Two purposes, never conflated.** Every ACDC in a granted DAG needs an *Issuer*
+authentication factor — proof it was authentically issued. The `grant` needs a *Grantor*
+authentication factor — fresh proof of control by whoever is presenting. "For a given
+ACDC, a Grantor may be the Issuee, Issuer, both, or neither."
+
+**Three factor types, strictly ranked:** registry (TEL) anchor, KEL anchor, bare
+signature. The ranking is not stylistic — registry and KEL anchors "enable perpetual
+verifiability and detectability of impersonation fraud. Whereas a bare signature does not,"
+and a registry anchor additionally carries lifecycle state. The composition rule is
+absorption: "when multiple authentication factors are either required or provided for the
+same purpose, the highest-preference factor is used, and the others are ignored."
+
+**Bare signatures are ephemeral in a strong sense.** "as soon as the Issuer rotates its
+keystate, any ACDCs it issued using a bare signature as the Issuer authentication factor
+with a prior keystate become unverifiable and must be reissued. This is only useful for
+truly temporary use (ephemeral) ACDCs." This is worth flagging against §3's claim that a
+bespoke origin "does not need to be anchored or use a registry": a registryless,
+signature-only bespoke origin is disposable by construction, which is fine for a one-time
+recipe and is *not* fine if anyone later needs to prove what was presented.
+
+**Vocabulary.** The Discloser sends `offer` and `grant` (Offerer, Grantor); the Disclosee
+sends `apply`, `agree`, `admit` (Applicant, Agreent, Admittant). "In common parlance, a
+Grantor is a Presentor, and the grant is a presentation." Where several AIDs endorse one
+grant, "there is a set of Grantors that each must be uniquely authenticated."
+
+## 7. Freshness: KRAM, and what rests on it
+
+Everything about multiply-endorsed presentation rests on KRAM, so its status matters more
+than any other single fact in this chapter.
+
+> **This section is an audit of KRAM's status as it bears on presentation, not an account
+> of what KRAM is.** For the mechanism itself — the problem it solves, simple vs full KRAM,
+> the monotonic timeliness cache, the v0.7.6 redesign, and its relationship to BADA-RUN —
+> see `bible/09-kram-and-request-authentication.md`, which is built from Sam's whitepaper
+> rather than from #1613's paraphrase of it. Two claims below are corrected there and are
+> marked in place.
+
+**The problem [N-adjacent].** A signature is a bearer token: "Any holder of both the
+document and its signature can replay them, and the signature will verify" (#1613). The
+KERI spec states the general form and prefers non-interactive mitigation — "Because
+non-interactive mitigations are asynchronous, however, they do not have the latency and
+scalability limitations of interactive mitigations and are therefore preferred" (KERI
+§Replay attack, ~L2878).
+
+**The proposed mechanism [P].** As #1613 describes it, KRAM (KERI Request Authentication
+Mechanism) uses "a message SAID `d` field, a sender AID `i` field, a receiver AID `ri`
+field, a salty nonce `u` field, and a datetime stamp relative to the receiver's clock `dt`
+field." **Corrected — the nonce is not part of KRAM.** The whitepaper builds uniqueness
+from monotonic ordering of receiver-clock datetimes, and argues at length that nonce-based
+mechanisms are what KRAM replaces; keripy reads `msg.stamp` and never touches `u`. See
+`bible/09-kram-and-request-authentication.md` §4, §8. Its properties are otherwise as
+stated: one play or none, within a window measured on the *receiver's* clock, so "The
+sender cannot therefore lie about the datetime in the message." A same-message replay
+inside the window is either ignored or, for a multisig sender, contributes its signature
+to an escrow — "This elegantly solves the multi-sig problem without requiring a
+pre-protocol to collect signatures. The receiver's KRAM escrow does the signature
+collection."
+
+**Three findings about KRAM's actual status, each verified.**
+
+*KRAM is not in the KERI specification.* A search for "KRAM" across KERI spec `main`
+@`be618e7` returns nothing in `spec/spec-body.md`. The spec discusses replay attacks and
+BADA-RUN at length and never names this mechanism. So the freshness guarantee the entire
+multiply-endorsed design depends on is, at the specification layer, absent. (One near-miss,
+found later: the rendered v1 artifact carries a *glossary cross-reference* imported from
+`trustoverip/kerisuite-glossary`, defining simple KRAM in a single sentence. It is not spec
+text, and it describes the variant that cannot support multisig — see
+`bible/09-kram-and-request-authentication.md` §5.)
+
+*The `u` field KRAM is described as using does not exist on an `exn`.* **This puzzle
+probably dissolves** — `u` is #1613's paraphrase, not the whitepaper's mechanism, per the
+correction above. The observation about message shapes stands on its own terms and is worth
+keeping, so it is recorded unchanged below. The KERI spec fixes
+both message shapes exactly: `xip` is `[v, t, d, u, i, ri, dt, r, q, a]` and `exn` is
+`[v, t, d, i, ri, x, p, dt, r, q, a]`, and for both, "All are REQUIRED. No other top-level
+fields are allowed (MUST NOT appear)" (~L1154, ~L1197). `u` is present on `xip` and
+absent on `exn`; the spec says `u` "appears in exchange transaction inception messages to
+ensure that the associated transaction ID is also universally unique" (~L963). #1613
+describes KRAM as using `u` and as applying "to each `xip` or `exn` individually." For an
+`exn` the uniqueness comes from `x` ⧺ `p` chaining instead. This may be a slip in the
+prose rather than a design gap, but it is not currently reconcilable as written.
+
+*keripy is further along than the July reading suggested, and the gap has moved.*
+**[K]** `Kramer` (`src/keri/core/kraming.py`) is real, exn-aware — its cache-type cascade
+is keyed by message ilk and route, `_fetchCacheType(msgType, route)` with "`exn`" named
+explicitly (~L282) — and it deliberately distinguishes sender from non-sender
+attachments. `_normalizeSenderSeals` "leaves only non-sender triples in ssts for non-auth
+forwarding / escrow" (~L386), and `_normalizeCurrentSenderTsgs` notes that "downstream
+exn/rpy handling still needs the[m]" (~L448). It is instantiated inside `Kevery`
+(`src/keri/core/eventing.py:4176-4178`) and is **default-disabled**: "KRAM enforcement
+remains controlled by the provided configuration, defaulting to disabled without one."
+**Sharpen that at `upstream/main` @`4df8e4a8` (2026-09-01):** `Kevery.__init__` still takes
+`enableKram=False`, but the two runtimes that matter both pass `enableKram=True` —
+`src/keri/app/directing.py:470` and `src/keri/app/indirecting.py:76`. Default-disabled is a
+fact about the class, not about deployed agents and witnesses.
+
+So KRAM now does exactly what #1613 says it does — passes non-sender endorsements along.
+And then `Exchanger.processEvent` throws them away, along with the whole message:
+
+```python
+if sender != prefixer.qb64:  # sig not by aid
+    ...
+    raise MissingSignatureError(msg)
+```
+(`src/keri/peer/exchanging.py:88-95`.) `peer/exchanging.py` contains no reference to
+`kraming` or `Kramer` at all. The July-2026 reading of this gap was "KRAM is not wired to
+exn." The accurate August reading is sharper and more actionable: **KRAM is exn-aware and
+preserves non-sender endorsements specifically so a downstream handler can use them, and
+the downstream handler rejects the message for carrying them.** That is a two-sided gap in
+one code path, not an absent feature.
+
+**Tethering [P].** Given multi-endorsement-aware KRAM, #1613 defines a derived property.
+The `grant` carries the origin SAID in an origin `o` field, and because the origin commits
+to every ACDC in its DAG, "when any Grantor AID appears anywhere in the DAG of ACDCs
+originating at the origin ACDC, then we say that that ACDC is *tethered* to the `grant`."
+Tethering means only that: fresh proof of control over that AID, wherever it appears.
+"Tethering implies no other relationship besides fresh (timely) proof-of-control over an
+AID so tethered." Its motivating case is entitlement replay — Bob's movie coupon, where
+Cal must know Bob and not the thief Ian is presenting.
+
+Note that the origin `o` field is **[P]** and appears in no spec. Note also that `o` is
+already the reserved label for **Operator** throughout the ACDC edge and edge-group
+blocks. The two live in different namespaces — an `exn` attribute section versus an ACDC
+edge block — so this is an overload rather than a collision, but it is an overload in a
+protocol family where `o` otherwise means exactly one thing.
+
+## 8. Multiply endorsed presentation: the proposal that moved
+
+This is the clearest case in the corpus of a design that was superseded, and reading the
+superseded version as current is the most likely way to be wrong about it.
+
+**#1555 (2026-07-29) [P, superseded].** Non-sender AIDs attach signature groups (`-X`/`-Y`
+for transferable, and seal-source equivalents) to a single `grant`; KRAM's timeliness
+extends to them. The signal that endorsement is *required* should live in the ACDC, not
+the `exn`, because "An exchange message is relatively simple in comparison to an ACDC.
+There is no normative cryptographic commitment in an exchange message to a given schema."
+The mechanism: a new M-ary edge-group operator, `ME`, on a bespoke origin, meaning each
+far ACDC in the group must be endorsed by its issuee via signatures attached to the grant.
+Multi-DAG presentation explicitly out of scope.
+
+**#1556 (2026-07-29) [P].** The companion. The global `I2I` default is a
+backward-compatibility accommodation for pre-operator vLEIs, and it fits the new
+non-delegative operators badly — an `ME` group would need explicit `NI2I` on every edge.
+Proposal: make unary defaults a function of the enclosing m-ary group operator (`ME` group
+→ `NI2I` default), and add an `IAND` group whose edges default to `E1E`. Not changing the
+global default, which "might break vLEIs in the wild."
+
+**#1613 (2026-08-12, revised to v1.5 on 2026-08-18) [P, current].** Opens by superseding
+its predecessor: "As of version 1.1, this discussion supersedes much of the 'Multiply
+Endorsed' discussion... This discussion solves for the proxy negotiator for another AID
+use case without needing a new edge operator." What it does *not* supersede is `ME` itself
+— "It does not supersede the proposal for a new edge operator" — and it explicitly does
+not solve "the more generic use cases of a proxy negotiator for multiple other AID nor the
+more generic case where multiple simultaneous AIDs are negotiating in concert."
+
+**The motivating case is correlation, not convenience.** "a given controller may use one
+AID it controls as a proxy to negotiate on behalf of another AID it controls so that this
+other AID is not disclosed until after contractual protection is in place... Only the
+first AID needs to participate in the failed negotiation and is the only one exposed by
+it." Sam (proxy negotiator) fronts for Bob (coupon issuee); Bob's AID appears for the
+first time in the `grant`.
+
+**The processing rule [P].** KRAM validates sender-AID groups and passes non-sender groups
+through; "to support multiply endorsed IPEX, the IPEX processor MUST validate all
+non-sender endorsements after KRAM." Signatures must verify against the endorser's
+*current* key state and satisfy its threshold; seal-source references must be found in the
+endorser's KEL against the message SAID; where both are supplied, "the seal source
+reference is preferred."
+
+**One limitation stated plainly, and it is the sharp edge.** A non-sender multisig endorser
+gets no help from KRAM's escrow-collects-signatures trick, "therefore, the Grantor must
+employ some pre-protocol to collect a threshold-satisfying set of signatures and then
+attach them to the grant." The offered mitigation is that a proxy and its principal are the
+same controller and can be given matching multisig infrastructure and threshold, in which
+case collection happens "serendipitously." That is a real constraint on deployment
+topology dressed as a coincidence.
+
+**Multiple endorsement attaches to the `grant` and to nothing else** — "A valid IPEX could
+consist of only a `grant` message. This means that multiple endorsements cannot depend on
+some combined effect of multiple messages."
+
+**Live co-presence versus durable consent.** `ME`-style endorsement requires every issuee
+online and signing at presentation time. It does not cover presentation on behalf of an
+*offline* party — a guardian for a dependent, an agent for a traveller. That case closes
+under plain `I2I` with a consent ACDC in the middle, and does so today at v2 with no new
+operator: `bespoke(issuer=A, issuee=V) --I2I--> consent(issuer=B, issuee=A) --I2I-->
+credential(issuer=HA, issuee=B)`. Both links satisfy `I2I`, and A cannot manufacture the
+bridge because the middle link demands B be the *issuer* of the consent. These are
+complementary halves — live freshness versus durable delegation bounded by revocation —
+and conflating them is easy. (Established by measurement, keripy v2, 2026-07-29; see
+#1555's comment stream.)
+
+## 9. Anchoring: the `ax` field, presentation registries, origin-AID anchoring
+
+All **[P]**, from #1613.
+
+**The gap `ax` fills.** KRAM proves timeliness but "gives neither party a way to signal to
+the IPEX that the relevant messages MUST be perpetually verifiable and hence anchored.
+Anchoring via KRAM is solely determined by the set of endorsers at the time the message is
+transmitted."
+
+**The field.** `ax` is a boolean in the **attribute `a` section** of `apply`, `offer`, and
+`grant`; truthy only if present and `True`. An IPEX may begin with any of those three, so
+any of them may carry it. Satisfying it means the Grantor anchors the `grant` and the
+Applicant anchors `agree` and `admit`, with an exception where a `grant` arrives without
+an enabling `agree`.
+
+Note the placement asymmetry against §4: `dp` is normatively in `q` and never in a
+`grant`; `ax` and the origin `o` are proposed for `a` and do appear in a `grant`. Any
+proposal that amends all three uniformly has to account for this.
+
+**Why anchor at all.** Anchoring `agree` gives the Discloser perpetually verifiable proof
+of agreement before disclosure; anchoring `grant` gives the Disclosee proof of "what was
+granted and, as importantly, what was not granted"; anchoring `admit` "removes plausible
+deniability regarding the Disclosee's knowledge of the disclosed information and could
+trigger safe harbor protections."
+
+**Presentation registries.** Summarized here because they bear on anchoring; treated in
+full in `bible/10-presentation-registries.md`, which is built from the concept's origin
+document — keripy discussion #1095, *ACDC Issuee Usage Registry*, ten months older than
+#1613 and filed under a different name, which is why earlier passes over this corpus
+missed it. A registry controlled by the *Issuee*, whose latest
+non-vacuous blinded state binds the `grant` SAID. Signalled by the issuer at issuance
+through a populated `rd` *and* `i` at the top level of the ACDC's **attribute `a`
+section** — note, not the ACDC's own top-level `rd`, which names the ACDC state registry.
+
+Two benefits, and only one is a security property. *Impersonation-fraud detection*: because
+the registry's events anchor in the Grantor's KEL, the Grantor can see events it did not
+create, and "an imposter that merely compromises the Grantor's signing infrastructure
+can't avoid the requirement without also compromising the Issuer." This works **only when
+the Issuer differs from the Grantor** — for a self-issued ACDC an imposter with the
+signing keys simply issues one that requires nothing. *Correlation resistance*: an
+anchored grant whose SAID appears only inside a blinded registry event means "a correlator
+walking the Grantor's KEL would not be able to observe it," so the exchange can be
+perpetually verifiable without giving a KEL-scanning third party a join key between
+Grantor and Grantee.
+
+**#1613 floats restricting `rd`-in-`a` to presentation registries.** The v1 spec also
+permits it as a *hidden ACDC state registry*, and #1613 judges that case "potentially
+dubious" and suggests forbidding it in v1.1. That question is live and touches the
+independent-registry bulk-issuance work directly enough to be worth watching.
+
+**Origin AID anchoring — the resolution.** With multiple Grantors, who must anchor? The
+complications are real: in a delegation chain, "Issuee AIDs that are not at the tail (leaf)
+of a delegation chain (tree) do not need a fresh proof-of-control"; and a Dossier-style
+evidence presentation may name an issuee wholly unrelated to the Discloser. Rather than
+enumerate, #1613 picks a rule: "either the sender must anchor the grant or the Issuee or
+Issuer of the origin ACDC of the grant must anchor the grant," checked in that order of
+priority. This is what lets the sender AID stay absent from the disclosed DAG entirely
+while the principal's anchor still satisfies the requirement.
+
+**The layering is explicit and worth preserving in any critique:** the anchoring rule "is a
+loose business logic requirement... enforced after the grant passes KRAM and IPEX multiple
+endorsement but before other business logic requirements." Cal's coupon rule — that *Bob
+specifically* must anchor — is EGF business logic riding above the protocol rule, not a
+substitute for it. A grant can pass KRAM, pass multiple endorsement, satisfy `ax`, and
+still be refused by the verifier's own policy, and #1613 treats that as correct.
+
+## 10. DAG soup, and the field-map amendment
+
+#1627's only concrete proposal. **[P]**
+
+**The argument for needing it at all.** A bespoke origin converts a soup into a DAG, so
+why keep soup? "When the ingredients are sourced from different cupboards, i.e., each have
+different Issuee, then the presentation must be multiply endorsed." And the practical
+case: presenting several DAGs in parallel in one exchange beats a series of IPEXes, since
+"A series of IPEX presentations adds more failure modes, and if the business logic requires
+all to complete for processing to continue, now the parties to the exchange have to keep
+state across multiple IPEXes. This requires a meta IPEX protocol."
+
+**The pivot away from edge operators.** #1555 put the multi-endorsement signal in the ACDC.
+#1627 reconsiders, because anchoring joined the picture: "#1555 predates #1613 which
+largely superseded #1555... now a fully multiply endorsed exchange gets more complicated
+with respect to anchoring, as there would be more than one effective origin node to which
+the anchoring requirement... must be applied. Following down the path of using new edge
+operators would require defining yet another edge operator that signaled the anchoring
+requirement." Conclusion: "the complications of a combination of multiply-endorsed and
+multiply-anchored presentations may flip the trade-space away from using edge operators as
+the primary way to signal either or both."
+
+**The amendment.** Each of `dp`, `o`, and `ax` gains a second form. Single DAG: unchanged.
+DAG soup: the value "becomes a field map, with a unique informative label for each DAG,"
+whose per-label values are respectively the tuple list, the origin SAID, and the boolean.
+Its claimed virtue is backward compatibility — "no changes are required to the current
+single DAG approach. Therefore, it can be added later when needed."
+
+**Four observations for anyone evaluating this.**
+
+*The labels are not informative; they are a join key.* If `dp`, `o`, and `ax` are all keyed
+by the same labels, those labels must agree across three field maps carried in messages
+sent by two different parties at different stages of a negotiation. That is a namespace
+requiring coordination, not an annotation.
+
+*It reintroduces the shape `dp` was deliberately given up.* The normative reasoning for a
+list over a field map is quoted in §4: a map "could not tell... apart" two ACDCs sharing a
+schema SAID. The soup form reinstates a map at the outer level, keyed by a
+presenter-chosen label instead of a schema SAID. Whether the objection transfers depends
+on whether two DAGs can collide the way two same-schema ACDCs can — but the burden of
+that argument has not been discharged.
+
+*The three fields do not live in the same place.* `dp` is normatively in `q`, and only in
+`apply` and `offer`. `o` and `ax` are proposed for `a`, and both appear in a `grant`. A
+DAG-soup `grant` carries `o` labels for DAGs whose existence the `apply` may not have
+anticipated, so it is not obvious the label spaces can be made to line up at all.
+
+*The alternative is not ruled out.* One bespoke origin with N edges, plus multiple
+endorsement, already presents material with different issuees as a single DAG — that is
+`ME`'s exact use case. #1627 asks "is there a need for a DAG Soup?" and answers "it
+depends," but the discriminator it gives (different issuees → must be multiply endorsed)
+applies equally to both shapes. What DAG soup buys over one bespoke origin plus
+multi-endorsement is, as of this writing, unstated.
+
+## 11. The two SEDI recipes, and the reissuance cascade
+
+#1627's applied section. Both are **[P]**; the trade is genuine and is the most decision-
+ready material in the discussion.
+
+**Bespoke origin as recipe** (§3). Maximum flexibility. Relationships form only at
+presentation time, so "Data changes in each isolated ACDC that cause reissuance do not
+trigger a cascade of reissuance of other ACDCs." Cost: a bespoke ACDC per presentation,
+and no memorialization — "A bespoke on-the-fly ACDC does not have any ability to
+memorialize the state of the graph at the time."
+
+**Chained ontology as recipe.** Pre-build the DAG as a standing labeled property graph, so
+that "All presentations are just branches of this master recipe." Edges are non-delegative
+(`NI2I` or `E1E`) since the issuee is constant. Simplest tooling; strongest normative
+structure for interop. Cost: the cascade — "whenever data changes in the root ACDC or in
+ACDCs that lie in upper branches of the graph... then all dependent ACDCs in lower branches
+or leaves must be reissued," mitigated by pushing volatile data to the leaves, and by a
+*transfer registry* whose state change forward-references a replacement rather than
+revoking.
+
+**What is not tradeable.** "secure delegation requires a DAG that represents the authority
+structure. A bespoke ACDC can not replace it. The delegation chain is inescapable." So
+guardianship and every other genuinely delegative use case needs the delegative DAG
+regardless of which recipe style is chosen, and the realistic answer is a combination.
+
+**A tension this chapter has not seen addressed.** Under the ontology recipe you present a
+*branch*, and a branch's local source node is not the ontology's origin. But §9's anchoring
+rule and §7's tethering are both stated in terms of "the origin ACDC" of the grant. If the
+origin is whichever node roots the presented branch, then which party can satisfy `ax`
+changes with the branch selected — and if instead the ontology's own source node must
+always be the origin, then every presentation drags the whole upper graph along, which is
+most of what the ontology approach was supposed to avoid. #1627 does not say which.
+
+## 12. Ground-truth matrix
+
+| Construct | Spec | Proposed in | keripy @`42db8991b` |
+|---|---|---|---|
+| One DAG, one origin, bespoke origin | **[N]** ACDC v1.1 | #1549 | structural only; no origin concept in IPEX builders |
+| `dp` disclosure paths, 3-tuple, `q` section | **[N]** ACDC v1.1 | #1512→#1542→#1549 | **absent** — no `'dp'` in `src/` |
+| Path prefix, `_` edge hop, node/leaf closure | **[N]** ACDC v1.1 | #1549 | absent; `Pather` has no edge traversal |
+| Unary ops `I2I`/`NI2I`/`DI2I`/`E1E`/`NOT` | **[N]** ACDC v1.1 | — | `I2I`/`NI2I`/`E1E` implemented; `DI2I`/`NOT` fail closed |
+| M-ary ops `AND`/`OR`/`NAND`/`NOR`/`AVG`/`WAVG` | **[N]** ACDC v1.1 | — | **none**; edge groups raise `KeyError: 'n'` |
+| Dossier ops `MxN`/`RMxN`/`MxQ`/`RMxQ` | **[N]** Dossier | — | absent |
+| Edge-group traversal | **[N]** ACDC v1.1 | — | **absent** — PR #1560 open |
+| `ME` operator | — | #1555 (not superseded) | absent |
+| Group-scoped unary defaults, `IAND` | — | #1556 | absent |
+| KRAM freshness | **absent from KERI spec** (glossary xref only) | whitepaper v0.7.6, #934, #1555, #1613 | `Kramer` exists, exn-aware, wired via `Kevery.processMsg`; off by class default, **on** in `directing`/`indirecting` |
+| Non-sender endorsement pass-through | — | #1555, #1613 | KRAM preserves them; `Exchanger` **rejects the message** (`exchanging.py:88-95`) |
+| Multiply-endorsed IPEX post-processing | — | #1613 | absent |
+| Origin `o` field in `grant` | — | #1613 | absent |
+| `ax` anchored-exchange field | — | #1613 | absent |
+| Presentation registry (`rd`+`i` in `a`) | v1 permits `rd`-in-`a`, purpose ambiguous; nested-`rd` purpose list includes "usage" | #1095 (origin), #1613, #1618 | blindable-registry substrate exists; **no signal recognition, no anchor enforcement** (ch. 10 §7) |
+| Tethering | — | #1613 | absent |
+| Origin-AID anchoring priority rule | — | #1613 | absent |
+| DAG soup / field-map `dp`,`o`,`ax` | — | #1627 | absent |
+
+The shape of that table is the chapter's most important single output: **the normative
+column is thick on structure and empty on authentication, and the keripy column is empty
+almost throughout.** Presentation architecture is, today, a design conversation with worked
+examples attached, not an implemented protocol.
+
+## 13. Open questions and known tensions
+
+Carried forward for anyone building on this chapter. Each is either unanswered in the
+sources or answered inconsistently across them.
+
+1. **Where does the multi-endorsement signal live?** #1555 says the ACDC (schema-is-type
+   gives a cryptographic commitment an `exn` cannot match). #1627 leans toward the `exn`
+   because anchoring would otherwise need a second operator. Both arguments are good and
+   they point opposite ways. `ME` is explicitly *not* superseded, so both are live.
+2. **What does DAG soup buy over one bespoke origin plus multiple endorsement?** (§10.)
+3. **Under the ontology recipe, which node is "the origin"?** Answering fixes who can
+   satisfy `ax` and what tethering covers. (§11.)
+4. **Can the field-map labels of `dp`, `o`, and `ax` be made to agree** across messages
+   sent by two parties, when `dp` is in `q` on `apply`/`offer` and the others are in `a`
+   including on `grant`? (§10.)
+5. **What is KRAM's normative home?** It is load-bearing for everything in §7-§9 and is in
+   no specification. Does it belong in the KERI spec, an IPEX spec, or neither? (Carried
+   forward and expanded in `bible/09-kram-and-request-authentication.md` §5, §9.)
+6. ~~**How does KRAM apply to an `exn`, which has no `u` field?**~~ **Resolved**: the `u`
+   field is #1613's paraphrase, not KRAM's mechanism. See §7 and
+   `bible/09-kram-and-request-authentication.md` §8.
+7. **Should `rd` in the attribute section be restricted to presentation registries?**
+   #1613 raises it and does not settle it, and the two options have very different blast
+   radii. Its *disambiguation* option (EGF declares the purpose; default is presentation
+   registry) breaks nothing: a presentation registry needs `rd`+`i` in `a` **and** a
+   non-empty top-level `rd`, while the hiding case needs the top-level `rd` absent, so the
+   two are already distinguishable. Its *forbid* option — "we might want to forbid using
+   the `rd` field in the attribute section for an ACDC state registry" — strikes **method
+   2** of the spec's three graduated-disclosure methods for a bulk-issued registry SAID
+   ("provide the `rd` field nested inside either the Attribute or Aggregate section",
+   ACDC v1.1 §Basic Bulk Issuance Procedure, ~L3049). #1613 justifies the restriction by
+   saying the hiding case "is not useful with full independent Registry bulk issuance
+   since... there would be no cross correlation even without contractual protection" —
+   which the pending `kswg-acdc-specification` #204 rebuts directly: the Registry SAID
+   "remains, however, a stable identifier for the copy itself, and hence for the context in
+   which that copy is used." Decorrelation across the set does not remove the per-context
+   correlator.
+8. **Is a registryless bespoke origin acceptable** as a first-class participant, given
+   that a bare-signature issuer factor dies at the issuer's next rotation? (§6, §3.)
+9. **Does the operator-token namespace need a registry**, now that ACDC and Dossier both
+   write into it and `ME`/`IAND` are proposed? (§5.)
+10. **Non-sender multisig endorsers need an out-of-band signature-collection pre-protocol.**
+    #1613 acknowledges this and mitigates it only by assuming shared infrastructure. (§8.)
+
+## 14. Sources
+
+**Specifications.** ACDC `v1.1` @`6a2a89c` — §Edge Section (~L1058), §Disclosure Paths
+(~L1809), §IPEX (~L1988), §Disclosure-specific (Bespoke) Issued ACDCs (~L2061). KERI
+`main` @`be618e7` — `xip`/`exn` message bodies (~L1154, ~L1197), UUID `u` (~L963),
+replay/BADA-RUN (~L2876). Dossier @`6037adf` — §Threshold Operators (~L364).
+
+**Discussions** (WebOfTrust/keripy, all by SmithSamuelM unless noted; bodies are revised
+in place — quote, don't cite by line): #1512 and #1542 (superseded `dp` precursors); #1549
+"Revised Disclosure Paths `dp` field value syntax", incl. the 2026-08-04 three-tuple
+comment and the 2026-08-12 exchange settling whole-ACDC paths; #1550 (ward/guardian
+authorization); #1555 "Multiply Endorsed Presentation"; #1556 "Unary Edge Operator
+Defaults"; #1613 "Authentication Factors in IPEX" (v1.5, 2026-08-18); #1627 "ACDC
+Presentation Architectures" (2026-08-19).
+
+**keripy** @`42db8991b` — `src/keri/vdr/verifying.py` (operator dispatch, `UnaryOps`:41,
+fail-closed:446-452, edge walk:175); `src/keri/vdr/eventing.py:2587` (`Reger.sources`);
+`src/keri/peer/exchanging.py:88-95` (non-sender rejection); `src/keri/core/kraming.py`
+(`Kramer`, sender/non-sender normalization ~L379-455); `src/keri/core/eventing.py:4176`
+(KRAM wiring, default-disabled); `src/keri/acdc/ipexing.py:345-520` (IPEX builders).
+
+**Open work that will move this chapter** — keripy #1560 (edge-group traversal, the
+prerequisite for every group-operator proposal), #1564 (`DI2I`), #1561 (`dp` in the worked
+examples), #1530/#1577 (guardianship presentations), #1576 (bulk issuance);
+`kswg-acdc-specification` #204, #207. Their comment streams hold settled answers that
+exist nowhere else.
+
+---
+
+# KRAM & Request Authentication
+
+**Thesis.** KERI signs everything, and a signature over an unordered message is a bearer token: whoever captures it can replay it. Key events are immune to this by construction — a sequence number and a prior digest give every key event its place in a total order — but the six *non-key-event* message types that carry all of KERI's supporting traffic (`qry`, `rpy`, `pro`, `bar`, `xip`, `exn`) have no such ordering, and therefore no built-in replay protection. KRAM is the mechanism that supplies it. Its design commitment is that replay protection must be **non-interactive**: no challenge, no nonce round trip, no session, because a challenge-response doubles the packet count and reintroduces a synchronous channel into a protocol family built for asynchronous public networks. In place of interaction, KRAM uses a datetime stamp read against *the receiver's* clock — so the sender cannot lie about time — plus, in its full form, a monotonic cache keyed per message. Those two supply the two properties every replay defence needs, timeliness and uniqueness.
+
+Two facts about KRAM's status matter more than any detail of its design, and they pull in opposite directions. It is **absent from every KERI specification**; and it is **substantially implemented in keripy**, to a 2,200-line module with a 5,700-line test suite. The gap between those is where every open question in this chapter lives.
+
+## 0. How to read this chapter: three tiers, marked
+
+Same convention as the presentation chapter, and it does more work here because one tier is nearly empty.
+
+- **[N]** — **Normative.** In the text of a published specification branch. **For KRAM this tier is empty**, and §5 documents the one near-miss.
+- **[P]** — **Proposed.** In Sam's KRAM whitepaper (`SmithSamuelM/Papers`, `whitepapers/kram.md`, v0.7.6) or in a keripy discussion. Note that the whitepaper is a different animal from a discussion post: it is a maintained, versioned, implementation-directive design spec that names Python modules and LMDB tables, and keripy is visibly built from it. It is still not binding on anyone outside keripy.
+- **[K]** — **keripy behavior** at `upstream/main` @`4df8e4a8` (2026-09-01); `src/keri/core/kraming.py` @`fe161709` (2026-08-20).
+
+Unmarked claims are this chapter's synthesis. Sources are mined in `raw/15-kram.md`.
+
+## 1. What problem KRAM solves, and why not the obvious alternatives
+
+**Secure attribution is ephemeral [P].** KERI's sign-everything posture means any over-the-wire message with a source AID and an attached signature can be attributed to that AID's controller. But the attribution decays: "Should the key state change between the time of origination and the time of verification, then the verifier can no longer assume the signature as a secure form of attribution because one of the primary reasons for a given controller to change its key state is to recover from key compromise" (keripy discussion [#934](https://github.com/WebOfTrust/keripy/discussions/934) §KRAM). A signed message is therefore "at best, an ephemeral issuance given the dynamic key state of the AID" — good enough to defeat impersonation *at reception*, and no more.
+
+**The division of labor [P].** #934 states the scope in one sentence: "KERI Key Event messages and their associated KELs have built-in ordering mechanisms that are tied to the current key state, so they are self-protecting from replay attacks. However, the generic exchange, query, reply, prod, and bare messages do not have any built-in replay attack protection. For this purpose, the KRAM (KERI Request Authentication Mechanism) was designed." **KRAM is exactly the non-key-event message layer.** If you find yourself asking whether KRAM applies to an `icp` or `rot`, the question is malformed.
+
+**Why not a session, and why not a nonce [P].** #934 enumerates three families of replay protection — authenticated sessions on a synchronous channel, interactive challenge-response, timeliness-ordered authentication — and eliminates the first two: sessions are "precluded for asynchronous networks", and challenge-response "is fundamentally less scalable… since it requires a minimum of two times the message traffic for each message to be authenticated." The whitepaper adds a historical argument: nonce challenge-response is an artifact of an era before network time servers, before cheap CSPRNGs, and before asymmetric signatures were affordable, carried forward by teaching habit rather than analysis. Under KERI's actual assumptions — verified key state, ubiquitous NTP, microsecond clocks, asynchronous public networks — the mechanism to beat is a signed timestamp, and eliminating half the packets is "a huge design win."
+
+This is the same architectural instinct as the rest of KERI: prefer the non-interactive, end-verifiable construction, and pay for it in local state rather than in round trips. The KERI spec makes the parallel argument for data-at-rest in its BADA-RUN treatment — "Because non-interactive mitigations are asynchronous… they do not have the latency and scalability limitations of interactive mitigations and are therefore preferred" (KERI spec §Replay attack) — without ever naming KRAM. **BADA and KRAM are siblings, not the same thing**, and §6 takes up where they collide.
+
+**The general form [P].** "In general replay attack protection imposes some form of timeliness to any signed request and some form of uniqueness to any signed request" (whitepaper §Replay Attack Protection). Everything below is one of those two properties or a resource bound on them.
+
+## 2. Simple KRAM: what is deployed, and why it is not enough
+
+**The mechanism [P].** A message carries a `dt` stamp; the receiver accepts it only if that stamp lies inside a window around the receiver's own current time, `[t-d-m*l, t+d]`, where `d` is clock drift/skew, `l` is average network latency and `m` a small integer. Typical values given: `d = 0.01` s, `l = 1` s, `m = 3`. **No cache.** The security argument is bluntly stated: "This window limits the time during which a replay attack can be mounted… Therefore the protective efficacy of simple KRAM is better the smaller the window."
+
+Because the window is anchored to the *receiver's* clock, "the originator of the message can't lie about time." That inversion is the load-bearing idea, and it survives into full KRAM unchanged.
+
+**Why this is what shipped [P].** #934 is unusually candid: "due to the exigency of limited resources in implementing support for the vLEI, only the most expedient version of KRAM, called simple KRAM, was implemented. This has now become problematic and is largely the root cause of the associated issues and discussions." The surrounding section generalizes it into an account of why KERI components sit at uneven maturity levels — GLEIF delivered the vLEI under real time and budget pressure, "bare-bones features needed for the vLEI became expedient, whereas other features were not."
+
+**The failure: multisig cannot fit through a three-second window [P].** This is the crux of the whole KRAM programme. With a multisig sender, a receiver running simple KRAM has only one workable policy: accept on any one member's signature. But then "the message is not protected by the threshold of the group multi-sig." Escrowing to collect the rest does not rescue it, because "all the to-be escrowed signatures must still arrive within the narrow time window, which means the coordination of the group members must be tight enough to fit in this window." Three humans on three devices do not sign within three seconds. So a multisig `exn` under simple KRAM either abandons its threshold or cannot be sent at all.
+
+**The production workaround, and its cost [P].** "Two-level simple KRAM" is named as "the current supported approach": the over-the-wire `exn` acts as a *wrapper*, single-signed by any one member and subject to KRAM, while an *embedded payload* is separately signed by the group, is not subject to KRAM, and goes into a signature-collecting escrow once the wrapper is through. The whitepaper describes the payload as "a tunneled exchange message… The tunnel is meant to cross through simple KRAM." Every member signs twice, and the escrow must hold partially signed payloads for as long as the group takes to converge. The variant that collects payload signatures *before* sending, via a pre-protocol, is HAMI ([keripy#911](https://github.com/WebOfTrust/keripy/issues/911)).
+
+**Read this as an architectural tell.** A mechanism whose window must be short to be secure, meeting a signing ceremony whose duration is set by humans, produces a tunnel through the security mechanism. Full KRAM's central move is to make the window long *without* making it weak.
+
+## 3. Full KRAM: monotonic caches, and why the window can be long
+
+**The move [P].** Replace "is this timestamp fresh?" with "is this timestamp fresh *and* strictly later than the last one I cached for this sender?" Once a monotonic cache is doing the uniqueness work, the window's job changes completely: "the monotonicity of the cache protects against a replay attack and the time window merely bounds the memory requirements." A window that is only a memory bound can be hours, days or weeks. **That single reallocation of responsibility is what makes multisig workable**, and it is the most important idea in the chapter.
+
+**Window and cache [P].** The window is `[t-d-l, t+d]` on the receiver's clock. Redesign-era example values: `d = 100` ms, short lag `sl = 2` s, long lag `ll = 2` h, exchange lag `xl = 48` h. A cache entry records the message's datetime and the window parameters in force when it was created — so reconfiguring windows never disturbs caches already in flight.
+
+**Retrograde clock protection [P].** A rewound receiver clock would otherwise re-open the window on old messages. Cached entries already refuse them; for everything else, "the receiver persists to durable storage a single timestamp of the latest time it sees. If the network time is even older than the latest saved time, the receiver can refuse to accept messages until the clock catches up."
+
+**Detection, not only prevention [P].** Under the strict policy the receiver answers a given signed request exactly once, which makes a successful interception *visible to the sender*: either no response arrives, or it arrives redirected from a host that is not the responder. This is duplicity-detection reasoning — KERI's signature move — applied to request authentication, and it is worth naming when someone objects that a timing window is weaker than a nonce.
+
+**Granularity is both isolation and parallelism [P].** Cache keys are drawn from the vector `[source AID, message type, route, exchange ID, message ID]`. Finer keys stop interleaved transactions from colliding, and because microsecond timestamps give ~1M monotonic slots per second *per cache entry*, finer keys also raise throughput. The whitepaper's worst case: with `d = 100` ms and zero network latency a sender has roughly 90,000 slots before it runs past the receiver's leading edge and must block; every millisecond of real latency adds 1,000 more. Conclusion: microsecond resolution "is more than adequate for the foreseeable future."
+
+**One rule with teeth [P].** "When using per-transaction ID or per-message ID caching, the window size must be per transaction type, not per transaction ID/message ID, to avoid a cache-prune replay attack." A sender that could name its own window could either exhaust the receiver's memory with an unprunable cache, or open a replay gap at prune time. **Window class is always the receiver's decision.** Any proposal to let a message declare its own freshness budget runs into this.
+
+**Out-of-order is not replay [P].** Asynchronous multipath delivery reorders messages that are not attacks. The whitepaper's answer is structural: interactive transactions self-order because the parties take turns, so use one cache entry per transaction on asynchronous transport, and only pipeline several transactions through one entry on an in-order channel or where the transaction layer retries.
+
+## 4. The v0.7.6 redesign: three authentication types, two window levels, two gap attacks
+
+The whitepaper's front matter is a redesign that supersedes the material behind it, and reading the older sections as current is the easiest mistake to make with this source. Sam's stated motive: "we added a lot of flexibility to allow resource tuning that may be overkill… in hindsight, I think single-key and multi-key controlled identifiers are sufficiently different that a different logic split would benefit."
+
+**Authentication types, chosen by cardinality not threshold [P].** Three: attached seal reference (`asr`), attached signature single-key (`assk`), attached signature multi-key (`asmk`). The split is by "the cardinality of the current key list for the sender AID, not by whether the attached signature(s) satisfy the threshold… because threshold satisfication requires verifying the attached signatures first, which is a much heavier operation than merely counting the elements in the key list." A seal-reference message needs no signature collection at all — the anchoring seal in the sender's KEL already authenticated it — so it takes the short window whatever the key list looks like. When both a seal and signatures are attached, the seal is validated first because it is cheaper; if it validates, the signatures are discarded.
+
+**The payoff:** only `asmk` ever waits. Long windows are confined to the one case that genuinely needs them, so the exposure that a long window represents is not spread across all traffic.
+
+**Two window levels [P].** An inner window per message ID, `[rdt-d-l, rdt+d]`, and for transactioned exchanges an outer window per exchange ID, `[xdt, xdt+xl]`, anchored at the `dt` of the `xip` that opened the transaction. Both must be satisfied. The outer window exists because "a transaction may not advance until a message is authenticated" — without a cap on the transaction as a whole, an exchange cache could never be released.
+
+**Per-message-ID caching has a pleasant side effect [P].** A message's SAID digests its `dt`, so two messages with different datetimes are different message IDs with different caches. Consequently a sender needs no cross-device synchronization to avoid tripping its own monotonicity, and reordered arrivals do not knock each other out. The price is storage: "the lower storage limit required for full KRAM is higher," and window size is the only remaining knob.
+
+**The redesign assumes KERI v2 [P].** Transactioned `exn` requires a non-empty `x`; a v1 `exn` is treated as non-transactioned even when its `p` field chains it to a predecessor.
+
+**Accept lag vs prune lag, and the two gap attacks [P].** Each cache type carries paired lags — `sl/ll/xl` to accept, `psl/pll/pxl` to prune — with prune ≥ accept and typically equal. The pair exists to make *reconfiguration* safe:
+
+- **Gap replay.** A message is accepted, then pruned. The accept window is lengthened. The pruned message is replayed and now falls inside the window with no cache entry left to refuse it.
+- **Gap first-play.** A message is rejected as too old and so is never cached. The accept window is lengthened. An attacker submits it as a *first* play. The whitepaper works the case: the sender, seeing no response, reissues identical content with a fresh `dt` and fresh message ID, and the victim suffers the effect twice from two messages that differ only in their timestamp.
+
+The mitigation is a staged change: raise the prune lag immediately, then delay raising the accept lag by `delta = new - old` so any exploitable message ages out first. Decreases are safe and immediate. **Changing the *granularity* of cache types is the unsolved case in the whitepaper** — "This logic has yet to be worked out" — because adding a route-specific type can extend coverage to messages that a shorter-windowed type would have refused.
+
+**Configuration, including a firewall [P].** A `"kram"` dictionary in the HJSON config carries `enabled`, `caches` (prepopulating the cache-type table) and `denials` — a list of `(version, ilk, route-prefix)` triples that behave "like a set of explicit firewall denial rules," where a match *disables* KRAM for that message. Its stated purpose is backward compatibility for pre-KRAM applications and for "message-type-route combinations, such as BADA-RUN endpoints, that conflict with KRAM."
+
+**KEL availability: drop and cue, don't escrow [P].** If the sender's KEL or the specific event is missing, the whitepaper says drop the message and cue a retrieval rather than escrow it, because "the time required to notify and then retrieve the KEL exceeds the KRAM message window, causing the message to be dropped, even after the KEL is retrieved. Which makes moot the use of the escrow." It notes in passing that the existing escrow logic has "a bug… that can cause a loop that repeatedly reescrows."
+
+**DDoS surface [P].** Stripping attachments to force a drop is a weak DoS; stripping and reattaching invalid signatures is stronger; attaching a bogus seal *alongside* valid signatures is an amplification attempt against the receiver's processing budget. The answer is ordering — accept if either authenticator validates, check the cheapest first — with transport encryption as a complementary mitigation.
+
+## 5. Normative status: the tier that is empty
+
+**KRAM is in no KERI specification [N-absent].** A search across `trustoverip/kswg-keri-specification` returns one file, `docs/versions/v1/index.html`, and the hit is not spec text. It is an external cross-reference pulled from `trustoverip/kerisuite-glossary` (declared `external_spec: "keri1"`, `specs.json:26`), and the whole of it is: "All requests from a web client must use KRAM (KERI Request Authentication Method) for replay attack protection. The method is essentially based on each request body needing to include a date time string field in ISO-8601 format that must be within an acceptable time window relative to the server's date time," plus a link to the `WebOfTrust/kram` repo. `spec/spec-body.md` does not mention KRAM. The ACDC and CESR specs do not mention it.
+
+Three things follow, and they are all worth saying out loud.
+
+**The one published definition describes the version that is known to be inadequate.** The glossary defines simple KRAM — a window, no cache — which is precisely the variant #934 says cannot support multisig. An implementer reading the specs and the glossary and nothing else would build the thing the designer has already superseded.
+
+**The name is unstable.** Whitepaper and repo say "Mechanism"; the glossary says "Method." Both circulate. Use "Mechanism."
+
+**Everything load-bearing lives in a personal repo.** `SmithSamuelM/Papers/whitepapers/kram.md` is versioned (v0.7.6), maintained (substantive commits through March 2026) and directive down to Python module names — but it is one person's repository on a `master` branch, with no change-control process, no review gate, and no stable citation. The keripy implementation issue [#937](https://github.com/WebOfTrust/keripy/issues/937) names it as the target of implementation. **A protocol layer that every non-key-event message depends on is specified nowhere that a standards process can reach.** That is the finding an adversarial reviewer will lead with, and it is correct.
+
+## 6. KRAM and BADA-RUN: siblings that cannot both govern a message
+
+Both are non-interactive replay defences; they are not the same mechanism and do not compose silently.
+
+**BADA (Best-Available-Data-Acceptance) [N]** is in the KERI spec, and governs *data at rest*: it guarantees monotonicity of updates to signed data. For KEL-anchored updates, accept if the update's anchor is later in the KEL than the prior's. For signed-but-not-anchored updates, compare key states, later key state wins, and where the key-state location is equal, later datetime wins — with **datetimes relative to the controller's clock** (KERI spec, ~L2887-2918; `raw/01-keri-spec.md` §10).
+
+**KRAM [P]** governs *messages in flight*, with **datetimes relative to the receiver's clock**.
+
+**They disagree on whose clock is authoritative**, which is why a single message cannot be subject to both. The whitepaper resolves it by exclusion rather than reconciliation: BADA-RUN endpoints go in the denials list. **[K]** keripy hard-codes that resolution — `Kramer.OobiDenials` merges denials for `rpy` routes `/end/role` and `/loc/scheme` whenever KRAM is enabled, with the comment that "OOBI endpoint discovery replies rely on BADA acceptance rather than KRAM replay protection" (`kraming.py:98-147`).
+
+The clean statement: **BADA orders what a host stores; KRAM orders what a host accepts off the wire.** OOBI and service-endpoint discovery are BADA's, everything else in the non-key-event set is KRAM's, and the boundary is drawn by configuration rather than by the message shape — which means it is a thing an operator can get wrong.
+
+## 7. What keripy actually does
+
+**[K] The redesign is built, and it tracks v0.7.6 rather than the older strata.** `src/keri/core/kraming.py` is 2,224 lines against a 5,768-line test file. Specifics worth knowing:
+
+- `AuthTypeCodex` defines exactly `asr`/`assk`/`asmk` (`kraming.py:38-51`).
+- `Kramer.intake` implements the whitepaper's denials-then-`kramit` shape nearly line for line, prefix-matching a compacted denial string (`kraming.py:963-969`).
+- `_fetchCacheType` implements the reduced three-level cascade: `msgType.R.route`, then `msgType`, then a default catchall keyed `"~"` — chosen so it sorts last in LMDB, where the whitepaper says "default" (`kraming.py:276-308`).
+- Fourteen KRAM sub-databases (`basing.py:737-856`): cache-type, message cache, transactioned cache, transaction-opener datetimes, partially-signed message/signature/sender-key-state, and one per non-authenticator attachment type.
+- Multi-key accumulation detects a mid-collection rotation by comparing a stored `(sn, said)` establishment reference against the current kever, and drops the message if the sender rotated (`kraming.py:1094-1103`).
+- The reconfiguration machinery the whitepaper left unfinished exists: `changeConfig`, `reconcileConfig`, `_buildCoverageGraph`, `_computeCoverageDiff`, `_computeWorstCaseDelta`, `_validateCoverage` (`kraming.py:1552-2093`).
+- `Pruner` is an hio `Doer` on a 1-second period driving `_pruneMessages` and `_pruneExchanges` (`kraming.py:2162-2221`).
+
+**[K] The `processMsg` consolidation the whitepaper asks for exists.** `Kevery.processMsg` (`eventing.py:4681`) is the single entry point for `qry, rpy, pro, bar, xip, exn`, documented with the whitepaper's three steps in order: AID allow/deny, `self.kramer.intake()`, then message-specific dispatch. `processXip`, `processPro` and `processBar` are stubs (`eventing.py:4816-4826`) — KRAM will authenticate a `xip` and then hand it to a `pass`.
+
+**[K] "Default-disabled" is true of the class and misleading about deployments.** `Kevery.__init__` takes `enableKram=False` (`eventing.py:4136`), so a bare `Kevery` does no KRAM. But `directing.py:470` and `indirecting.py:76` both pass `enableKram=True` — the runtimes that actually run agents and witnesses turn it on. Anyone repeating "KRAM is disabled by default" should say which of those two claims they mean.
+
+**Implementation history [P/K].** [#1302](https://github.com/WebOfTrust/keripy/issues/1302) (closed 2026-03-25) records that PR #1288 landed the core "aligned with the v0.7.5 whitepaper" and lists as remaining gaps the attachment databases, the pruning doer, keystate-retrieval cueing, AID allow/deny, and continued signature collection until the prune window. All of those are present at `upstream/main` today. The implementation is not a sketch; it is close behind a moving specification.
+
+**Two divergences worth checking [K].**
+
+1. **Cache-type route matching is exact; denial route matching is a prefix.** `_fetchCacheType` compares `key == f"{msgType}.R.{route}"` while `intake` uses `md.startswith(d)`. So a cache-type configured for `/end` does *not* govern a message routed `/end/role`, though a denial configured for `/end` does deny it. The whitepaper's "most specific matching" language does not settle which was intended, and the asymmetry is the kind that produces a window silently defaulting to the catchall.
+2. **The gap-attack defences assume windows change only through `changeConfig`.** Cache entries store their own parameters at creation precisely so in-flight caches are immune to reconfiguration. That invariant is the hinge of the whole gap-attack argument and deserves an explicit test.
+
+## 8. Where KRAM is load-bearing for other designs
+
+**Multiply-endorsed presentation rests on it entirely** — see `bible/08-presentation-architectures-and-ipex.md` §7-§9. The proposed IPEX design uses KRAM's escrow as the *signature-collection mechanism itself*: a replayed copy of the same message inside the window is not an attack but a contribution, so "This elegantly solves the multi-sig problem without requiring a pre-protocol to collect signatures. The receiver's KRAM escrow does the signature collection" ([keripy#1613](https://github.com/WebOfTrust/keripy/discussions/1613)). That is an elegant reuse, and it means a freshness mechanism is also an availability mechanism: if KRAM's escrow is off or its window is short, group presentation does not merely lose replay protection, it stops working.
+
+**The `ax` anchoring field exists because KRAM's guarantee expires.** #1613's argument for `ax` is that KRAM proves timeliness but "gives neither party a way to signal to the IPEX that the relevant messages MUST be perpetually verifiable and hence anchored." KRAM is a freshness mechanism, not an evidence mechanism; anchoring is what converts a timely exchange into a durable one.
+
+**Tethering is defined in terms of KRAM's guarantee.** An AID appearing anywhere in the disclosed DAG is "tethered" to a grant when KRAM has established fresh proof of control over it — "Tethering implies no other relationship besides fresh (timely) proof-of-control over an AID so tethered."
+
+**A correction to the presentation chapter, on the evidence of the primary source.** That chapter (`bible/08-...` §7) describes KRAM, following #1613, as using "a message SAID `d` field, a sender AID `i` field, a receiver AID `ri` field, a salty nonce `u` field, and a datetime stamp," and then flags a problem: `u` is not a field of an `exn`. **The whitepaper does not build KRAM on a nonce.** Its uniqueness comes from monotonic ordering of receiver-clock datetimes, and its `§Background` is an extended argument that nonce-based mechanisms are the thing KRAM replaces. A salty nonce appears once, in a different role: placed in the `q` modifier block of a transaction's first message to make the *transaction ID* universally unique — and the whitepaper immediately says a unique transaction ID cannot substitute for a timestamp, "because a timestamp is still needed in order to know when any given transaction can be pruned." So the `u`-on-`exn` puzzle is most likely an artifact of #1613's paraphrase rather than a design gap. The keripy implementation reads `msg.stamp` and never touches `u` (`kraming.py:1006-1009`), which is consistent with the whitepaper and not with the paraphrase.
+
+## 9. Open questions
+
+1. **Where does KRAM get a normative home?** It is required for every non-key-event message and specified only in a personal repository. The KERI spec is the obvious candidate; a standalone specification is the alternative.
+2. **What is the migration path from simple to full KRAM?** The glossary defines simple; deployments run simple; keripy now implements full; multiply-endorsed presentation needs full. Nothing states what a mixed network does, or how a receiver signals which it enforces.
+3. **Is `Signify-Timestamp` enforced anywhere?** **[K]** KERIA's admin interface signs over `Signify-Timestamp` as one of `Authenticater.DefaultFields` (`WebOfTrust/keria` `src/keria/core/authing.py:81`) and stamps responses with `nowIso8601()` (`:180`), but no comparison against the server clock appears in `authing.py`, `httping.py` or `agenting.py` (searched 2026-09-01). The signature *binds* a timestamp; nothing observed *rejects* a stale one. This is a negative search result and so is weaker evidence than a positive finding — but it is the exact shape of simple KRAM minus the window, and it is worth a maintainer's answer.
+4. **Who owns the granularity-change gap analysis?** The whitepaper marks it unfinished; keripy implements it. Which is authoritative when they differ?
+5. **What happens downstream of `xip`, `pro` and `bar`?** All three pass through KRAM into stubs.
+6. **How should an operator choose window classes?** The lag values are security parameters — too long widens the replay surface, too short breaks multisig — and there is no policy guidance anywhere, only example numbers.
+7. **Does the `Exchanger` gap in the presentation chapter close here?** KRAM deliberately preserves non-sender endorsements for downstream handlers (`_normalizeSenderSeals`, "leaves only non-sender triples in ssts for non-auth forwarding / escrow"), and `Exchanger.processEvent` still rejects any message carrying a signature not from the sender (`src/keri/peer/exchanging.py:88-95`, verified at `upstream/main` @`4df8e4a8`). Two halves of one code path, still pulling in opposite directions.
+
+**Sources.** `raw/15-kram.md`. Primary: `SmithSamuelM/Papers` `whitepapers/kram.md` v0.7.6 @`67550b47`; keripy discussion [#934](https://github.com/WebOfTrust/keripy/discussions/934); keripy issues [#937](https://github.com/WebOfTrust/keripy/issues/937), [#1302](https://github.com/WebOfTrust/keripy/issues/1302), [#911](https://github.com/WebOfTrust/keripy/issues/911); `WebOfTrust/kram` README (superseded). Code: keripy `upstream/main` @`4df8e4a8` — `src/keri/core/kraming.py`, `src/keri/core/eventing.py:4136-4826`, `src/keri/db/basing.py:737-856`, `src/keri/peer/exchanging.py:88-95`; keria `src/keria/core/authing.py`. Spec: `trustoverip/kswg-keri-specification` `spec/spec-body.md` (KRAM absent), `specs.json:26` (glossary xref).
+
+---
+
+# Presentation Registries & Issuee-Side Detectability
+
+**Thesis.** KERI's answer to key compromise is not prevention but *detect and recover*, and for the Issuer that answer is already built: because an ACDC's state must be anchored in a TEL that is anchored in the Issuer's KEL, an Issuer can see fraudulent issuances it did not create, without anyone's cooperation. **The Issuee has no equivalent.** A compromised Issuee's keys can present its credentials, and the real Issuee has no place to look. A presentation registry — Sam's original and better name for it is an *Issuee usage registry* — closes that asymmetry by giving the Issuee its own blindable state registry, requiring that a presentation be anchored in it, and thereby letting the Issuee detect presentations it did not make and rotate to invalidate them.
+
+Two things distinguish this from the rest of the presentation design. First, it is **deliberately optional**, and the argument for optionality is quantitative: Issuer compromise is rampant and high-ROI, Issuee compromise is localized and low-ROI, so Issuee-side detectability is a measure an Issuee elects and pays for rather than a protocol requirement. Second, it does **two unrelated jobs with one mechanism** — impersonation-fraud detection and correlation resistance — and they have different preconditions, so a design that satisfies one may not deliver the other. Confusing them is the most likely error in this area.
+
+Status: **entirely pre-normative, and intended**. The concept is specified in two GitHub discussions, appears in no specification, has no implementation, and its origin document has sat for ten months without a single comment — but the silence is not a verdict: Sam named presentation registries alongside observers and registrars as work to be built, on a call on 2026-09-01 (§8). Read what follows as a design that is going somewhere and is not yet close to normative text.
+
+## 0. How to read this chapter
+
+Tier markers as in the presentation and KRAM chapters:
+
+- **[N]** — in a published specification branch. **Nearly empty here**; §5 gives the one word that qualifies.
+- **[P]** — proposed in a keripy discussion.
+- **[K]** — keripy behavior at `upstream/main` @`4df8e4a8` (2026-09-01).
+
+**A warning that is also a research finding: this concept has two names, and searching one misses the other.** Sam calls it an **Issuee usage registry** in [#1095](https://github.com/WebOfTrust/keripy/discussions/1095) (October 2025) and a **presentation registry** in [#1613](https://github.com/WebOfTrust/keripy/discussions/1613) (August 2026). A search for "presentation registry" across keripy returns #1613, #1618 and #1550 and **not** #1095 — which is the document that invents the idea and carries most of its security reasoning. In speech Sam has used a third name, "user presentation registry" (KERIcon 2026, `raw/14-kericonf-2026.md`). This chapter uses "presentation registry" for the IPEX-anchoring application and "usage registry" for the general primitive, and §7 argues that distinction is real rather than cosmetic. Sources mined in `raw/16-presentation-registries.md`.
+
+## 1. The asymmetry that motivates it
+
+**Issuer-side detectability is mandatory, and already exists [P].** #1095's argument: the catastrophic failure is Issuer key compromise, because "the worst form of fraud with the most widespread potential of harm would be rampant impersonation fraud… This could annihilate trust in the ecosystem fostered by any assurance derived from the Issuer. The ROI to an attacker for compromising the Issuer keys could be huge, especially if that Issuer is a root-of-trust for Identity assurance for an ecosystem." Anchoring answers it: "an impersonator cannot impersonate the Issuer of an ACDC merely by compromising the signing keys of the Issuer. The impersonator MUST anchor the ACDC in a TEL that is anchored in the Issuer's KEL. This anchor enables the Issuer to detect any fraudulent issuances without requiring the cooperation of any other party, such as the Verifier."
+
+That last clause is the KERI-shaped part: detection with no dependency on a counterparty. Sam attaches a comparative claim — "AFAIK, only KERI/ACDC provides such protection in a decentralized identity system" — which is his assessment, not a surveyed result, and should be repeated as such.
+
+**Issuee-side detectability is optional, and the reasoning is explicit [P].** "If a given Issuee's keys are compromised, the impersonation fraud is localized to that specific Issuee. It does not have rampant potential." Three consequences, all from #1095:
+
+1. **Low susceptibility.** "Because the fraud is localized to a single Issuee, the ROI to the attacker for compromising the Issuee's keys is low." And a cheap mitigation already exists: prophylactic rotation, effective "because the verifier always checks the presentation as being signed by the latest keys of the Issuee." Sam names this as distinctive — the Issuee's ability "to rotate signing keys without reissuing the ACDC is a unique super-power of KERI/ACDC as a decentralized identity system."
+2. **Localized harm licenses localized measures.** A Verifier could simply require a rotation as part of the presentation. Sam concedes what that costs doctrinally: "This violates the maxim that security not be dependent on a trusted third party, but for localized harm, the party most likely to be harmed is the Verifier (Validator), which provides incentives for them to protect themselves." **Record this as a real exception rather than smoothing it over** — it is one of the few places in the corpus where the no-trusted-third-party maxim is knowingly relaxed, and an adversarial reviewer will find it whether or not we flag it.
+3. **The Issuee can elect its own detectability.** That is the usage registry.
+
+**The design consequence of optionality [P].** "This is an optional protection measure. Many Issuees will feel that their key management is sufficient to protect against key compromise and therefore would not want the extra protection and friction of a usage Registrar." A presentation registry means the Issuee runs infrastructure — "the Issuee must have its own Registrar to manage its usage registries." That cost is why the mechanism is elective, and why any argument that it should be mandatory has to answer it.
+
+## 2. The mechanism
+
+**The rule, in its original form [P].** "The ACDC must include a requirement that the ACDC is only verifiable when the presentation of the ACDC by the Issuee is anchored as the latest state in an Issuee-controlled *usage registry*. The verifier won't accept the credential if it's also not anchored in the Issuee's (in addition to the Issuer's) registry" (#1095).
+
+**Developed into IPEX terms [P].** In #1613 the anchored object is the `grant`: "the value of the registry `rd` field in the attribute `a` section MUST be the SAID of the `rip` event of the associated presentation Registry. The Issuee of the associated ACDC, who is also a Grantor of that IPEX, MUST control this registry. The value of the ACDC SAID field in the blinded attribute block of the latest non-vacuous event in that presentation Registry must be the SAID of the `grant` message." Note the field reuse: the slot that normally carries an ACDC SAID carries a `grant` SAID.
+
+**One registry can serve many credentials without leaking which [P].** "A *usage registry* can be employed to track the usage of one or more ACDCs by the Issuee… This means that the registry does not leak specific usage of a given ACDC to third parties" (#1095). Blindable state is what makes many-to-one safe; without blinding, a shared registry would be a correlation engine rather than a defence.
+
+**Detection converted to prevention, at the price of latency [P].** #1095 offers a verifier-side trick that appears nowhere else in the corpus: "by adding a time delay from presentation anchor to acceptance, the verifier can assume that a compromised Issuee would do a recovery, invalidating the fraudulent presentation." Detect-and-recover normally means the damage lands and is then undone; a deliberate acceptance delay gives the real Issuee a window to rotate *before* the presentation is honored. **This is worth more attention than it has had.** It is the only proposal in the corpus that converts Issuee-side detectability into Issuee-side prevention, and its cost — every honest presentation waits — is exactly the kind of tradeoff an EGF should be setting.
+
+**Incentive alignment, stated as a rule of construction [P].** "The verifier has a vested interest in not accepting unanchored presentations as the presentation of an Issuee unanchored ACDC that declares it must be Issuee usage anchored, must be considered fraudulent" (#1095). #1613 sharpens it into a liability claim: a verifier accepting an unanchored grant "is presumptively in violation of any contractual or regulatory protection afforded to the real Grantor by colluding with a fraudulent grantor."
+
+## 3. Two jobs, two different preconditions
+
+This is the section to get right, because the mechanism is the same in both cases and the guarantees are not.
+
+**Job one: impersonation-fraud detection — requires that the Issuer is not the Grantor [P].** The protection works because the requirement is baked in by someone the attacker has not compromised: "an imposter that merely compromises the Grantor's signing infrastructure can't avoid the requirement without also compromising the Issuer." The Grantee enforces it by refusing an unanchored grant; the real Issuee then sees registry events it did not create and rotates.
+
+The hole is self-issuance, and #1613 states it plainly: "For ACDCs that the Grantor self-issues, this is only a vulnerability if the Issuance authentication factor is merely an unanchored signature. An imposter who controls the Grantor's signing infrastructure can create ACDCs whose authentication factor is an unanchored signature." An attacker holding your keys can simply issue itself a credential that demands nothing. **So the fraud-detection property is a property of the three-party arrangement, not of the registry.**
+
+**Job two: correlation resistance — works even self-issued [P].** The problem: if a Grantor anchors a `grant` SAID directly in its public KEL and the Grantee anchors the same SAID in its own, "a third party… would be able to detect the same grant SAID in both the Grantor's KEL and the Grantee's KEL, thereby correlating the IPEX." Anchoring in a blinded presentation registry instead means "neither the grant SAID nor any other artifacts of the granted DAG appear in the KEL of the Grantor," so "a Grantee could anchor every message in the IPEX without providing a point of correlation between the KELs of the Grantor and Grantee."
+
+For this job a Grantor needs no cooperating Issuer: it self-issues a bespoke origin ACDC carrying `i` and `rd` in its attribute section — "the Grantor is both Issuer and Issuee of that bespoke ACDC." One constraint rides along, and it is easy to violate: "the bespoke ACDC itself must use a blinded state Registry for its Issuer authentication so that the SAID of its ACDC is not correlatable. If it uses a direct KEL anchor, then that anchor itself would be correlatable. If it used a bare attached signature… then the ACDC itself would not be perpetually verifiable despite using a perpetually verifiable presentation registry."
+
+**Correlation resistance is itself conditional [P].** The registry is "bound to the AID of the Issuee, so it is linkable. A bulk-issued ACDC with independent AIDs can remove this linkage" (#1095). So full unlinkability needs blinded state *and* independent-registry bulk issuance. A presentation registry used naively hides *which* credential was presented while advertising *that* the Issuee presented something.
+
+**Multi-ACDC DAGs [P].** "When multiple ACDCs in the granted DAG each have a different presentation registry ID field value… the verifier must verify all of the anchors." And a precise statement of what a single anchor buys, worth quoting whenever someone over-claims: because the `grant`'s `o` field names the DAG origin, anchoring in one registry "provides a perpetually verifiable proof of the presentation of all ACDCs in that DAG, **but not necessarily a fresh proof of control for all Issuee AIDs in that DAG**. Multiple anchors in different registries provide multiple vectors of detectability and multiple fresh proofs-of-control; the perpetual verifiability is redundant."
+
+## 4. The trigger, and the ambiguity blocking it
+
+**The signal is a three-part test [P].** From #1613: the requirement fires when a non-empty `rd` **and** a valid Issuee `i` are at the top level of the ACDC's attribute `a` section, **and** the ACDC's own top-level `rd` is non-empty. Miss any one and the meaning changes: with no Issuee in `a`, an `rd` in `a` imposes no anchoring requirement at all; with the top-level `rd` empty or missing, the `rd` in `a` "refers to an ACDC state registry, not an IPEX presentation registry." **The top-level `rd` is doing disambiguation work**, which is the easiest part of this design to miss when reading #1613 quickly.
+
+**Why disambiguation is needed [P].** The v1 spec also permits `rd` in `a` as a *hidden ACDC state registry*, so one field slot carries two unrelated meanings. #1613 offers EGF-declared purpose with "The default, if not otherwise specified, should be for anchoring presentation exchanges," floats forbidding the hiding case in v1.1, and then argues that case down: its only benefit arises "when the ACDC in compact form is made public, independent of any given presentation, and the fact of it having a registry must remain undisclosed. It is not clear that this is a worthy use case… Given the potentially dubious value, we might want to forbid using the `rd` field in the attribute section for an ACDC state registry."
+
+The section ends unresolved — "Not sure if either is a worthy use case" — and **that unresolved state is what blocks normative text.** You cannot specify a trigger condition on a field whose meaning is still contested.
+
+**Field-placement consequence nobody else raises [P].** From #1618: "An exchange anchored in a presentation registry would also need an `rd` on the exchange." If true, this design implies a field addition to `exn`, not only to the ACDC — and that is not accounted for in #1613's `ax` treatment.
+
+## 5. What is normative: one word
+
+**[N]** In `trustoverip/kswg-acdc-specification` `spec/spec-body.md` @`f0bd097` (2026-08-28), neither "presentation registry" nor "usage registry" appears. What does exist:
+
+- The nested-`rd` field's purpose list includes usage. Top-level: "Issuance and/or revocation, transfer, or retraction registry for ACDC" (`:23`). Not-at-top-level: "Issuance and/or revocation, transfer, retraction, **or usage** registry for ACDC when not at top-level" (`:48`). **That word "usage" is the only trace of this design in any specification.**
+- Nested `rd` is open-ended, but the examples point elsewhere: it "MAY be used for some other registry, such as an application-specific or **Issuer-specific** registry" (`:85`). The spec does not contemplate an Issuee-controlled registry.
+- The spec's rationale for nesting is bulk issuance and graduated disclosure — it "may better facilitate contractually protected disclosure of the bulk-issued registry" (`:326`) — not fraud detection.
+- Blindable state registries and `rip` are fully normative, with a worked lifecycle. A `rip` is "a vacuous placeholder that reveals nothing about what will later be issued," which is where #1613's "latest non-vacuous event" phrasing comes from.
+
+**One wording tension to fix before any spec text [N/P].** "Because the Issuer `i` field appears in the `rip` event, the Registry SAID, `rd` field value cryptographically binds the Registry to the Issuer AID" (`:2019`). For a presentation registry the incepting AID is the **Issuee**. The spec sentence is about the registry's own incepting controller and is not wrong, but its vocabulary assumes the two coincide, and they do not here.
+
+## 6. Where this sits against Registrar/Observer and KRAM
+
+**It extends the governance split to a third party.** `bible/05-acdc-and-verifiable-data.md` §Registrar/Observer records Sam's framing that the split deliberately replays witness/watcher one layer up: "we have witnesses that are controlled by controllers, watchers that are controlled by verifiers… We have registrars controlled by the issuers, and observers controlled by the verifiers" (KERIcon 2026, `raw/14`). A presentation registry adds an Issuee-controlled Registrar to that picture — the Holder, previously the one party in the triangle running no state infrastructure, now runs some. **This is the synthesis the corpus does not state anywhere**, and it makes the design look less like a bolt-on: "We shouldn't have shared governance" applied consistently gives every party to a transaction its own state service.
+
+Sam's KERIcon phrasing is the clean version: presentation registries let "presenters detect compromise of their proofs that are in their credentials that they're presenting. So they themselves will protect it from fraud, not just the issuer." (Edited auto-caption — read `raw/14` §0 before quoting it to anyone.)
+
+**It sits inside KRAM's window [P].** "in order to pass KRAM, a `grant` message anchor must happen in a timely fashion relative to the IPEX exchange. The `grant` message… must be created, then anchored, and then pass the receiver's KRAM" (#1613). A presentation registry therefore inserts a registry write into the critical path of a freshness window — and #1095's verifier-side delay deliberately adds more latency on top. Nothing in the corpus connects the two numerically. See `bible/09-kram-and-request-authentication.md` §3 on why full KRAM's windows can be long enough to absorb this, and §9 on the absence of any window-class policy guidance.
+
+**It is independent of, and stronger than, `ax` [P].** "Notwithstanding the presence or absence of the `ax` field, when an ACDC in a granted DAG meets the requirements for a Issuer signaled presentation anchor registry… then that `grant` message MUST be anchored in that registry for the `grant` to be valid. Otherwise, the presumption is that the grant is fraudulent." `ax` lets a party *request* perpetual verifiability; a presentation registry lets an Issuer *impose* it at issuance time, and the Grantor cannot opt out later. See `bible/08-presentation-architectures-and-ipex.md` §9.
+
+**Scope judgment on which registry may be used [P].** "There is no security advantage to using a presentation registry specified by the Grantor, as the main purpose… is to allow the Grantor to detect a compromise of its signing key infrastructure… Thus, the main use case for impersonation fraud detection of the Grantor requires a pre-specified presentation registry **by an Issuer different from the Grantor**." On tooling, #1613 declines to build anything special: "we should use the existing tooling for a bulk-issued ACDC to handle it."
+
+## 7. keripy: the substrate exists, the feature does not
+
+**[K] Present.** `src/keri/acdc/regeventing.py` (1,204 lines) is the v2 registry event layer — `_validateRip`, `_validateUpdate` for blindable updates, `vet()` returning verified registry state. `src/keri/acdc/registraring.py` (400 lines) provides `Regery` ("Local manager for V2 ACDC blindable state registries"), `Registry` and `Registrar` ("facade for V2 registry inception and blindable state updates"). `src/keri/acdc/messaging.py` builds ACDCs with a `regid` and an `iseaid`.
+
+**[K] Absent.** Nothing recognizes the three-part signal: `acdcatt`'s `regid` parameter is the *top-level* `rd`, so a caller wanting `rd` in the attribute section must hand-build the attribute dict. Nothing enforces a grant anchor: `src/keri/acdc/ipexing.py` (722 lines — `IpexHandler` plus the `apply`/`offer`/`agree`/`grant`/`admit` builders) contains no registry or anchor check. And nothing distinguishes an Issuee-controlled registry from an Issuer-controlled one — a `Registrar` is a `Registrar`, and no code consumes the difference.
+
+**So an Issuee could stand up a usage registry today with shipped tooling, and no verifier would look at it.** The gap is entirely on the verification side.
+
+**[K] No implementation work is proposed.** Across all of keripy there are no issues and no pull requests for this (searched 2026-09-01 across "presentation registry", "presentation registries", "issuee usage registry", "usage registry"). The single PR hit is our own merged `#1505`, whose mentions record a deliberate decision *not* to use one in a bespoke one-time presentation, with a follow-up example flagged and not yet written.
+
+## 8. Reading this adversarially
+
+Four things a hostile reviewer will reach for, stated here so they are not surprises.
+
+**The origin document has had no engagement — but the idea is live.** #1095 is ten months old with zero comments, and #1627 — Sam's newest architecture discussion, updated 2026-09-01 — does not mention presentation or usage registries at all. On the written corpus alone, whether the idea was settled, parked or quietly superseded could not be determined. **It is not superseded.** On a call on 2026-09-01, Sam named observers, registrars and presentation registries together as things that need to be built (Daniel Hardman, first-hand, same day). So the silence in the written record is a gap in the record, not a signal about the design — which is worth knowing, because the natural inference from a ten-month-dead discussion is the opposite one.
+
+**Provenance note on that.** This is a new class of source for the corpus: a first-hand report of an unrecorded spoken statement, with no transcript and no artifact to cite. It is `[SAM-DIRECT]` in substance and weaker than `raw/14`'s edited captions in form, since not even approximate wording survives — treat it as reliable evidence of *intent and status*, and not as a quotation of anything. It settles that the work is intended; it settles nothing about the design's details, which remain as unresolved as §9 says.
+
+**The novelty claim is unverified.** "nobody else does as far as I've never seen anybody do it" (KERIcon) and "AFAIK, only KERI/ACDC provides such protection" (#1095) are both explicitly hedged by their author. Holder-side presentation logging is not an unheard-of idea in the wider VC world; what is distinctive here is that the log is cryptographically *required* by the credential and enforced by the verifier, rather than being a courtesy audit trail. That narrower claim is defensible; the broad one has not been checked.
+
+**The trusted-third-party concession is real.** §1 records it in Sam's own words. Any presentation of KERI that leads with "security never depends on a trusted third party" has to account for it.
+
+**Fraud protection has a self-issuance hole that its own author documents.** §3. An attacker with the Grantor's keys can self-issue a credential that requires nothing. The mitigation is that high-stakes credentials come from third-party Issuers — which is true and is also an admission that the property lives in the deployment pattern, not the mechanism.
+
+## 9. Open questions
+
+1. ~~**Is this live?**~~ **Answered: yes.** Sam named observers, registrars and presentation registries together as work to be built, on a call on 2026-09-01 (first-hand report, §8). The written silence — ten months of no comments on #1095, no mention in #1627 — does not reflect the design's status. What remains open is everything below, none of which the call addressed.
+2. **What is it called?** "Issuee usage registry" (#1095), "presentation registry" (#1613, #1618), "user presentation registry" (KERIcon). #1550's *Guardianship for SEDI* uses the same primitive for agent capability control, with a diagram legend reading `rd = issuee usage registry SAID` — so the general thing is not about presentation, and the general name should probably be the usage one, with "presentation registry" reserved for the IPEX-anchoring application.
+3. **Does `rd`-in-`a` get disambiguated, and how?** EGF-declared purpose, restriction to presentation registries in v1.1, or left ambiguous. Unresolved in #1613 and blocking any normative text. Tracked as open question 7 in `bible/08-presentation-architectures-and-ipex.md`.
+4. **Does the exchange need its own `rd`?** #1618 says an anchored exchange "would also need an rd on the exchange," which implies a field addition to `exn` that #1613 does not account for.
+5. **What is the latency budget?** Registry write inside KRAM's window, plus a deliberate verifier delay. No number anywhere.
+6. **What would `rip` spec text say?** The current wording binds a registry to "the Issuer AID" (`spec-body.md:2019`); for a presentation registry the incepting AID is the Issuee.
+7. **Who verifies, and against what?** The design says the Grantee must check the anchor. Against the Issuee's Registrar directly, or via an Observer? `bible/05` records that Observers are verifier-controlled and watch registrar state — which is exactly the shape this needs — but no source connects them.
+
+**Sources.** `raw/16-presentation-registries.md`. Primary: keripy discussions [#1095](https://github.com/WebOfTrust/keripy/discussions/1095), [#1613](https://github.com/WebOfTrust/keripy/discussions/1613); supporting [#1618](https://github.com/WebOfTrust/keripy/discussions/1618), [#1550](https://github.com/WebOfTrust/keripy/discussions/1550), [#1627](https://github.com/WebOfTrust/keripy/discussions/1627) (silence); `raw/14-kericonf-2026.md` (KERIcon, edited captions). Spec: `trustoverip/kswg-acdc-specification` `spec/spec-body.md` @`f0bd097` — `:23`, `:48`, `:85`, `:326`, `:2019`. Code: keripy `upstream/main` @`4df8e4a8` — `src/keri/acdc/regeventing.py`, `src/keri/acdc/registraring.py`, `src/keri/acdc/messaging.py`, `src/keri/acdc/ipexing.py`.

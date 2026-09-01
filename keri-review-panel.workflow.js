@@ -1,7 +1,7 @@
 export const meta = {
   name: 'keri-review-panel',
   description: 'Adversarial multi-persona review of a KERI/ACDC/CESR DESIGN proposal (spec change, discussion, PR, worked example, or pasted prose). Reasons in KERI\'s own terms via keri-doctrine.md; dedupes by dedupe_key and adjudicates dispositions. args is an OBJECT (see whenToUse).',
-  whenToUse: 'For a multi-lens review of a KERI/ACDC/CESR design argument. ARGS (object): proposal = the design argument — a URL (GitHub PR/discussion), a file path, or pasted text / an email thread (required). targets = array of repo/spec pointers the proposal touches (e.g. ["/…/keripy","/…/signify-ts"]) that personas cross-reference to verify machine-behavior claims; relative pointers resolve against baseDir. baseDir = the launching session absolute cwd (for relative targets/outDir). personas = array of names/prefixes (SEC,KRT,PRV,SPC,SKP,GOV,CSR), the string "auto" (topic-dispatch picks load-bearing lenses from the proposal), or omitted (DEFAULT four: SEC,SKP,SPC,GOV). Optional: milestone (run label), outDir (where reviews are written; default <baseDir>/keri-review-<YYYY-MM-DD>-<milestone>), concurrency (default 3), effort, model, overrides = {PREFIX:{effort,model}}, verify ("off"|"default"|"all"). Writes per-persona reports + one synthesis to <outDir>/reviews/ (outDir defaults to <baseDir>/keri-review-<YYYY-MM-DD>-<milestone>, so runs never overwrite each other) and returns the triaged queue.',
+  whenToUse: 'For a multi-lens review of a KERI/ACDC/CESR design argument. ARGS (object): proposal = the design argument — a URL (GitHub PR/discussion), a file path, or pasted text / an email thread (required). targets = array of repo/spec pointers the proposal touches (e.g. ["/…/keripy","/…/signify-ts"]) that personas cross-reference to verify machine-behavior claims; relative pointers resolve against baseDir. baseDir = the launching session absolute cwd (for relative targets/outDir). personas = array of names/prefixes (SEC,KRT,PRV,SPC,SKP,GOV,CSR), the string "auto" (topic-dispatch picks load-bearing lenses from the proposal), or omitted (DEFAULT four: SEC,SKP,SPC,GOV). Optional: milestone (run label), outDir (where reviews are written; default <baseDir>/.ignored/keri-review-<YYYY-MM-DD>-<milestone>), concurrency (default 3), effort, model, overrides = {PREFIX:{effort,model}}, verify ("off"|"default"|"all"). Writes per-persona reports + one synthesis to <outDir>/reviews/ (outDir defaults to <baseDir>/.ignored/keri-review-<YYYY-MM-DD>-<milestone> — gitignored, so panel output never becomes a loose untracked file in a repo Daniel does not maintain, and runs never overwrite each other) and returns the triaged queue.',
   phases: [
     { title: 'Preflight', detail: 'normalize the proposal (fetch URL / read file / accept text), resolve the panel prompts dir, validate targets' },
     { title: 'Scope', detail: 'topic-dispatch lens selection (only when personas: "auto")' },
@@ -22,13 +22,13 @@ const CONCURRENCY = (args && args.concurrency) || 3
 const TARGET_POINTERS = (args && Array.isArray(args.targets)) ? args.targets : []
 
 const ALL_PERSONAS = [
-  { slug: 'protocol-security-verifier-realist', prefix: 'SEC', name: 'Protocol Security & Verifier Realist', bible: '02, 03, 07', effort: 'deep' },
-  { slug: 'kr-relation-algebra-theorist', prefix: 'KRT', name: 'Knowledge-Representation & Relation-Algebra Theorist', bible: '05, 06, 07', effort: 'deep' },
-  { slug: 'privacy-correlation-resistance-specialist', prefix: 'PRV', name: 'Privacy & Correlation-Resistance Specialist', bible: '06, 05, 07', effort: 'medium' },
-  { slug: 'spec-precision-language-designer', prefix: 'SPC', name: 'Spec-Precision & Language Designer', bible: '01, 04, 07', effort: 'medium' },
-  { slug: 'first-principles-skeptic', prefix: 'SKP', name: 'First-Principles Skeptic', bible: '02, 01, 07', effort: 'medium' },
-  { slug: 'governance-interop-lifecycle-architect', prefix: 'GOV', name: 'Governance, Interop & Lifecycle Architect', bible: '06, 05, 07', effort: 'medium' },
-  { slug: 'cesr-wire-serialization-engineer', prefix: 'CSR', name: 'CESR / Wire-Format & Serialization Engineer', bible: '04, 03, 07', effort: 'medium' },
+  { slug: 'protocol-security-verifier-realist', prefix: 'SEC', name: 'Protocol Security & Verifier Realist', bible: '02, 03, 07, 09', effort: 'deep' },
+  { slug: 'kr-relation-algebra-theorist', prefix: 'KRT', name: 'Knowledge-Representation & Relation-Algebra Theorist', bible: '05, 06, 07, 08', effort: 'deep' },
+  { slug: 'privacy-correlation-resistance-specialist', prefix: 'PRV', name: 'Privacy & Correlation-Resistance Specialist', bible: '06, 05, 07, 10', effort: 'medium' },
+  { slug: 'spec-precision-language-designer', prefix: 'SPC', name: 'Spec-Precision & Language Designer', bible: '01, 04, 07, 09', effort: 'medium' },
+  { slug: 'first-principles-skeptic', prefix: 'SKP', name: 'First-Principles Skeptic', bible: '02, 01, 07, 10', effort: 'medium' },
+  { slug: 'governance-interop-lifecycle-architect', prefix: 'GOV', name: 'Governance, Interop & Lifecycle Architect', bible: '06, 05, 07, 10', effort: 'medium' },
+  { slug: 'cesr-wire-serialization-engineer', prefix: 'CSR', name: 'CESR / Wire-Format & Serialization Engineer', bible: '04, 03, 07, 09', effort: 'medium' },
 ]
 const NAME_TO_PREFIX = {
   sec: 'SEC', security: 'SEC', krt: 'KRT', kr: 'KRT', 'relation-algebra': 'KRT',
@@ -85,11 +85,12 @@ const PREFLIGHT_SCHEMA = {
     proposal_kind: { enum: ['url', 'file', 'text'] },
     today: { type: 'string' },
     prompts_dir: { type: ['string', 'null'] },
+    doctrine_sync: { type: ['string', 'null'] },
     targets: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['pointer', 'resolved', 'kind', 'exists'], properties: { pointer: { type: 'string' }, resolved: { type: ['string', 'null'] }, kind: { type: 'string' }, exists: { type: 'boolean' } } } },
   },
 }
 const pf = await agent(
-  `You are the preflight for a KERI design-review panel. Do THREE things, make no edits:\n\n` +
+  `You are the preflight for a KERI design-review panel. Do FIVE things, make no edits:\n\n` +
   `1. NORMALIZE THE PROPOSAL. The proposal is provided below between <<< >>>. Decide its kind:\n` +
   `   - if it looks like a URL (starts with http), FETCH it (WebFetch) and extract the actual proposal/discussion/PR text;\n` +
   `   - else if it is an existing file path (test -f), READ it;\n` +
@@ -102,7 +103,13 @@ const pf = await agent(
   `3. VALIDATE TARGETS. For each of these pointers ${JSON.stringify(targetsForAgent)}: run \`git -C "<p>" rev-parse --show-toplevel\` ` +
   `   (if it is a git repo, resolved = toplevel, kind = "code-repo" or "spec-repo" by content); else if the path exists, resolved = it, kind = "dir"/"file"; else exists=false. Run shell under \`nice -n 19 ionice -c 3\`.\n\n` +
   `4. DATE THE RUN. Run: date +%F ; return it as "today" (YYYY-MM-DD). It names this run's output directory, so runs never collide.\n\n` +
-  `Return {short_name, normalized_proposal, proposal_kind, prompts_dir, targets:[{pointer, resolved, kind, exists}], today}.`,
+  `5. STAMP THE DOCTRINE. The doctrine and bible sections are VENDORED in the panel, not read live, so a run must say which ` +
+  `   snapshot it used. Read <prompts_dir>/reference/SYNCED-FROM and take its "commit:" value. Then, IF the source workspace ` +
+  `   exists, compare: run \`git -C ~/code/me/keri-bible rev-parse --short HEAD\`. Return "doctrine_sync" as one line: the ` +
+  `   stamped commit, plus " (STALE: keri-bible is at <sha>)" when they differ, or " (current)" when they match, or ` +
+  `   " (source workspace absent — snapshot not verifiable)" when the path does not exist. If SYNCED-FROM is missing entirely, ` +
+  `   return "unstamped — vendored copy has unknown provenance, run ./sync-reference.sh". Do NOT sync or edit anything; report only.\n\n` +
+  `Return {short_name, normalized_proposal, proposal_kind, prompts_dir, doctrine_sync, targets:[{pointer, resolved, kind, exists}], today}.`,
   { label: 'preflight', phase: 'Preflight', schema: PREFLIGHT_SCHEMA },
 )
 if (!pf) return { error: 'preflight failed' }
@@ -116,10 +123,22 @@ const goodTargets = (pf.targets || []).filter((t) => t.exists)
 // standards/reviews.md. The <YYYY-MM-DD>-<milestone> naming is the same either way.
 const RUN_DATE = pf.today
 const RUN_DIR_NAME = `${RUN_DATE}-${milestone}`
-const OUT = ((args && args.outDir) || (BASE_DIR ? `${BASE_DIR}/keri-review-${RUN_DIR_NAME}` : `${PROMPTS_DIR}/runs/${RUN_DIR_NAME}`)).replace(/\/+$/, '')
+// Default under .ignored/ (covered by ~/.gitignore_global), NOT the target's root. This
+// panel reviews repos Daniel does not maintain -- keripy and the kswg specs -- so its output
+// is his working material and must never be a loose untracked file someone could sweep into
+// a commit to a project he doesn't control. That differs from the panels this was scaffolded
+// from (origin-platform and friends), where review output was deliberately checked in to
+// share with colleagues; the assumption came along with the scaffold and was wrong here.
+const OUT = ((args && args.outDir) || (BASE_DIR ? `${BASE_DIR}/.ignored/keri-review-${RUN_DIR_NAME}` : `${PROMPTS_DIR}/runs/${RUN_DIR_NAME}`)).replace(/\/+$/, '')
 const reviewsDir = `${OUT}/reviews`
 const targetsBlock = goodTargets.length ? goodTargets.map((t) => `${t.resolved} (${t.kind})`).join(', ') : '(none supplied — reason from the proposal + doctrine; flag where a code/spec check is needed but unavailable)'
+// The doctrine is vendored, not read live (see sync-reference.sh), so every run records which
+// snapshot it reasoned from. A STALE stamp is reported, never auto-fixed: mutating the doctrine
+// mid-run would make two runs of the same proposal incomparable.
+const DOCTRINE_SYNC = pf.doctrine_sync || 'unstamped'
 log(`Proposal "${shortName}" (${pf.proposal_kind}); prompts ${PROMPTS_DIR}; targets: ${targetsBlock}; out ${reviewsDir}`)
+log(`Doctrine snapshot: ${DOCTRINE_SYNC}`)
+if (/STALE|unstamped/i.test(DOCTRINE_SYNC)) log(`  ^ run ./sync-reference.sh in the panel repo and commit, to review against current doctrine.`)
 
 // ---- Phase 0.5: topic dispatch (only when personas: "auto") ----
 if (AUTO_SCOPE) {
@@ -252,7 +271,7 @@ const PERSIST_SCHEMA = { type: 'object', required: ['path'], additionalPropertie
 const persisted = await agent(
   `Write the keri-review-panel synthesis report, then return its path. No source edits, no git add/commit.\n` +
   `Create "${reviewsDir}" if needed, then Write "${reviewsDir}/keri-review-panel-${milestone}.md" with:\n` +
-  `1. A header: proposal "${shortName}", targets [${targetsBlock}], milestone "${milestone}", date ${RUN_DATE}, personas (${PERSONAS.map((p) => p.prefix).join(', ')}), counts (${raw.length} raw, ${reconciled.length} after dedupe, ${blockers.length} blockers; verification: ${refuted.length} refuted).\n` +
+  `1. A header: proposal "${shortName}", targets [${targetsBlock}], milestone "${milestone}", date ${RUN_DATE}, personas (${PERSONAS.map((p) => p.prefix).join(', ')}), counts (${raw.length} raw, ${reconciled.length} after dedupe, ${blockers.length} blockers; verification: ${refuted.length} refuted), and on its own line "doctrine: ${DOCTRINE_SYNC}" — the vendored doctrine/bible snapshot this run reasoned from, so a reader can tell which version produced these findings.\n` +
   `1b. Immediately after the header, on its own line, exactly: "status: untriaged — ${blockers.length} blocking, ${reconciled.length} total." This line is the triage marker; a later session updates it in place as findings are dispositioned.\n` +
   `2. "## Executive verdict" verbatim:\n${summary}\n` +
   `3. "## Findings" — a table sorted CRITICAL->LOW: id | severity | confidence | layer | objective | disposition | reported_by | title.\n` +

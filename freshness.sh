@@ -15,17 +15,23 @@
 set -uo pipefail
 
 # --- config: live source roots (edit to match your checkout locations) ---
+# Paths follow the per-org bucket layout under ~/code (see ~/code/repos.yaml). These were
+# corrected on 2026-09-01: every root previously named a pre-reorg path like
+# /home/daniel/code/kswg-keri-specification, none of which had existed since the repos moved
+# into org buckets. Because a missing root was skipped silently, the script built an empty
+# corpus and reported every quote as drifted -- or was simply never run. It now fails loudly.
+CODE="${CODE_ROOT:-$HOME/code}"
 SOURCES=(
-  "/home/daniel/code/kswg-keri-specification/spec"
-  "/home/daniel/code/kswg-cesr-specification/spec"
-  "/home/daniel/code/kswg-acdc-specification/spec"
-  "/home/daniel/code/kswg-dossier-specification/spec"
-  "/home/daniel/code/papers"
-  "/home/daniel/code/keripy/src"
-  "/home/daniel/code/keria/src"
-  "/home/daniel/code/signify-ts/src"
-  "/home/daniel/code/keri-security-analysis"
-  "/home/daniel/code/keripy-knowledge"
+  "$CODE/wot/kswg-keri-specification/spec"
+  "$CODE/me/kswg-cesr-specification/spec"
+  "$CODE/me/kswg-acdc-specification/spec"
+  "$CODE/me/kswg-dossier-specification/spec"
+  "$CODE/me/papers"
+  "$CODE/wot/keripy/src"
+  "$CODE/wot/keria/src"
+  "$CODE/wot/signify-ts/src"
+  "$CODE/wot/keri-security-analysis"
+  "$CODE/wot/keripy-knowledge"
 )
 MINLEN=24   # skip short quoted spans (terms/framings, not source citations)
 
@@ -41,12 +47,26 @@ norm() { tr 'A-Z' 'a-z' | tr -d '*_`' | tr -d "\"'" | sed -E 's/[—–]/ /g; s#
 
 echo "building normalized source corpus..." >&2
 CORPUS="$(mktemp)"; trap 'rm -f "$CORPUS"' EXIT
+found_roots=0
 for root in "${SOURCES[@]}"; do
-  [ -e "$root" ] || continue
+  if [ ! -e "$root" ]; then
+    echo "WARNING: source root missing, skipping: $root" >&2
+    continue
+  fi
+  found_roots=$((found_roots+1))
   find "$root" -type f \( -name '*.md' -o -name '*.py' -o -name '*.ts' -o -name '*.txt' \) \
     -not -path '*/node_modules/*' -not -path '*/.git/*' -print0 2>/dev/null | xargs -0 cat 2>/dev/null
 done | norm > "$CORPUS"
-echo "corpus: $(wc -c < "$CORPUS") bytes" >&2
+echo "corpus: $(wc -c < "$CORPUS") bytes from $found_roots/${#SOURCES[@]} roots" >&2
+
+# A dead config looks exactly like total citation rot. Refuse to report that as a result.
+if [ "$found_roots" -eq 0 ]; then
+  echo "ERROR: no source roots exist. Fix SOURCES in $0 (or set CODE_ROOT). Not reporting drift." >&2
+  exit 2
+fi
+if [ "$found_roots" -lt $(( ${#SOURCES[@]} / 2 )) ]; then
+  echo "WARNING: fewer than half the source roots resolved; 'drifted' counts below are unreliable." >&2
+fi
 
 total=0; live=0; missing=0
 declare -a MISSING_LIST

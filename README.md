@@ -20,8 +20,10 @@ and a Workflow runner.
 | `personas/*.md` | The seven reviewer lenses (below). |
 | `keri-review-panel.workflow.js` | The runner: normalize proposal → (optionally dispatch lenses) → review → verify → synthesize → persist. |
 | `freshness.sh` | Re-anchoring / staleness checker — greps each doctrine quote against live sources; fail-loud on drift. |
-| `install.sh` | Symlinks the runner into `~/.claude/workflows/`. |
-| `reference/` | The `bible/` sections (depth reading each persona cites) + the assembled `keri-bible.md` + the decentralization-purity steering note. |
+| `install.sh` | Symlinks the runner into `~/.claude/workflows/`, then runs `sync-reference.sh` (non-fatally). |
+| `sync-reference.sh` | Refreshes `keri-doctrine.md` + `reference/` from the `keri-bible` workspace and stamps `reference/SYNCED-FROM` with the source commit. |
+| `reference/` | The `bible/` sections (depth reading each persona cites) + the assembled `keri-bible.md` + the decentralization-purity steering note. **Vendored, not read live** — see below. |
+| `reference/SYNCED-FROM` | Which `keri-bible` commit the vendored copy came from. The preflight reports it into every run's synthesis header. |
 
 ## The roster
 
@@ -65,6 +67,16 @@ deduped, triaged findings queue.
 2. **The doctrine is regenerable.** `reference/` holds the full bible and the per-source mining
    notes it was built from (in the sibling `keri-bible` workspace), so the doctrine can be refreshed
    against a newer spec/code baseline.
+3. **The doctrine is vendored, and deliberately not copied at run time.** The panel installs as a
+   standalone artifact and must run on boxes where `keri-bible` is absent, so no review may depend on
+   a path outside this repo. Vendoring also keeps runs *reproducible*: findings cite the doctrine, and
+   a doctrine that mutated under every run would make two runs of the same proposal incomparable —
+   which is exactly what the dated run directories exist to prevent. The real hazard is not staleness
+   but *silent* staleness, so: sync deliberately with `./sync-reference.sh`, which records the source
+   commit in `reference/SYNCED-FROM`; and the preflight reads that stamp, compares it against the
+   sibling workspace when present, and writes `doctrine: <commit> (current|STALE: …)` into the run
+   header. A stale panel now says so in its own output instead of quietly reviewing against old
+   doctrine. It reports; it never auto-syncs mid-run.
 
 ### A note on cross-model perspective
 The KRT (relation-algebra) lens is the best candidate to run on a *non-Claude* model for genuine
