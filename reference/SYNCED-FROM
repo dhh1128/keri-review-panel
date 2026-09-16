@@ -1,5 +1,5 @@
 source:  keri-bible
-commit:  47a5f44
-date:    2026-09-01
-subject: Doctrine: cover bible 08-10, add the replay shibboleths, name two residuals
+commit:  432f74a
+date:    2026-09-15
+subject: freshness.py: stop counting citation glue as drifted quotes
 path:    /home/daniel/code/me/keri-bible
