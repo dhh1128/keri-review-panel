@@ -1,5 +1,5 @@
 source:  keri-bible
-commit:  432f74a
-date:    2026-09-15
-subject: freshness.py: stop counting citation glue as drifted quotes
+commit:  75e33c8
+date:    2026-09-21
+subject: Record Sam Smith's "super = scope" framing and the discovery-layer shibboleth
 path:    /home/daniel/code/me/keri-bible
