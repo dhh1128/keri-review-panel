@@ -58,6 +58,8 @@ args = {
 The panel writes per-persona reports + one synthesis to the run's `reviews/` directory and returns a
 deduped, triaged findings queue.
 
+When a target is a keripy checkout, SEC also reads that checkout's `ref/ErrorHandling.md` live, if present. It states which exception types keripy's intake path catches and skips versus lets propagate, which decides whether a malformed peer message is dropped or crashes a service, so it is a security invariant rather than a style rule. keripy's naming and style conventions (`ref/naming.md`) are deliberately not loaded here; `upstream-pr` hands those to the `/code-review` step a keripy PR also owes.
+
 ## Two durability guarantees
 
 1. **Citations re-anchor at review time.** `keri-doctrine.md` line numbers are hints verified at a

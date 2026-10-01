@@ -132,6 +132,18 @@ const RUN_DIR_NAME = `${RUN_DATE}-${milestone}`
 const OUT = ((args && args.outDir) || (BASE_DIR ? `${BASE_DIR}/.ignored/keri-review-${RUN_DIR_NAME}` : `${PROMPTS_DIR}/runs/${RUN_DIR_NAME}`)).replace(/\/+$/, '')
 const reviewsDir = `${OUT}/reviews`
 const targetsBlock = goodTargets.length ? goodTargets.map((t) => `${t.resolved} (${t.kind})`).join(', ') : '(none supplied — reason from the proposal + doctrine; flag where a code/spec check is needed but unavailable)'
+// keripy states its intake error contract in ref/ErrorHandling.md (WebOfTrust/keripy#1704): which
+// exception types a long-running service catches and skips, and which it lets propagate. That
+// decides whether a malformed peer message is dropped or crashes a witness, so SEC reads it LIVE
+// from a keripy target. Live, not vendored: keripy maintains it and a copy here would go stale.
+// keripy's style conventions (ref/naming.md) are deliberately not loaded; they belong to the
+// /code-review step upstream-pr owes, not to a design panel.
+const KERIPY_TARGETS = goodTargets.filter((t) => /keripy/i.test(t.resolved || ''))
+const keripyIntakeFor = (prefix) => (prefix !== 'SEC' || !KERIPY_TARGETS.length) ? '' :
+  `KERIPY INTAKE CONTRACT: also read ${KERIPY_TARGETS.map((t) => `${t.resolved}/ref/ErrorHandling.md`).join(' ; ')} if it exists ` +
+  `(it may not be merged yet; if absent, say so and do not infer its content). It states which exception types keripy's intake ` +
+  `path (extract -> deserialize -> validate) catches and skips versus lets propagate. Judge any proposal that touches parsing, ` +
+  `validation or escrow against it: a peer-reachable failure raised outside that hierarchy is a crash-the-service finding.\n\n`
 // The doctrine is vendored, not read live (see sync-reference.sh), so every run records which
 // snapshot it reasoned from. A STALE stamp is reported, never auto-fixed: mutating the doctrine
 // mid-run would make two runs of the same proposal incomparable.
@@ -177,6 +189,7 @@ const perPersona = await runChunked(plan, CONCURRENCY, (p) => {
     `(effort: ${p.eff}, run_label: "${milestone}"). Run any shell under \`nice -n 19 ionice -c 3\`.\n\n` +
     `LOAD, in order: ${PROMPTS_DIR}/keri-doctrine.md ; ${PROMPTS_DIR}/review-house-style.md ; ${PROMPTS_DIR}/orchestrating-reviews.md ; ` +
     `your persona ${PROMPTS_DIR}/personas/${p.slug}.md ; your depth reading ${PROMPTS_DIR}/reference/bible/ sections ${p.bible}.\n\n` +
+    keripyIntakeFor(p.prefix) +
     `THE PROPOSAL UNDER REVIEW:\n<<<\n${NORMALIZED}\n>>>\n\n` +
     `TARGET SOURCES to cross-reference (verify machine-behavior claims here; RE-ANCHOR every citation against these LIVE sources — ` +
     `never cite a doctrine line number you have not re-confirmed): ${targetsBlock}.\n\n` +
