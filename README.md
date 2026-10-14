@@ -18,9 +18,12 @@ and a Workflow runner.
 | `review-house-style.md` | **Disposition spine.** The adversarial epistemics every persona shares (resist sycophancy, earn findings, no fence-sitting, steelman-before-you-strike). |
 | `orchestrating-reviews.md` | **Output contract.** Severity (adoption-obligation) and confidence semantics, `dedupe_key` convention, id prefixes, the re-anchoring rule, the findings manifest schema, and the synthesis contract. |
 | `personas/*.md` | The seven reviewer lenses (below). |
-| `keri-review-panel.workflow.js` | The runner: normalize proposal → (optionally dispatch lenses) → review → verify → synthesize → persist. |
+| `keri-review-panel.workflow.js` | The Claude Code Workflow runner: normalize proposal → (optionally dispatch lenses) → review → verify → synthesize → persist. |
 | `freshness.sh` | Re-anchoring / staleness checker — greps each doctrine quote against live sources; fail-loud on drift. |
-| `install.sh` | Symlinks the runner into `~/.claude/workflows/`, then runs `sync-reference.sh` (non-fatally). |
+| `cli/` | The engine-neutral runner (`keri-review-panel run`), with `codex` and `claude` backends. |
+| `skill/SKILL.md` | The skill Codex and Copilot CLI load; it starts the CLI and reports the result. |
+| `DESIGN.md` | Why the CLI exists beside the Workflow, what was decided and rejected, and what is unverified. |
+| `install.sh` | Symlinks the Workflow into `~/.claude/workflows/`, the CLI onto PATH and the skill into `~/.agents/skills/`, then runs `sync-reference.sh` (non-fatally). |
 | `sync-reference.sh` | Refreshes `keri-doctrine.md` + `reference/` from the `keri-bible` workspace and stamps `reference/SYNCED-FROM` with the source commit. |
 | `reference/` | The `bible/` sections (depth reading each persona cites) + the assembled `keri-bible.md` + the decentralization-purity steering note. **Vendored, not read live** — see below. |
 | `reference/SYNCED-FROM` | Which `keri-bible` commit the vendored copy came from. The preflight reports it into every run's synthesis header. |
@@ -40,6 +43,37 @@ PRV, CSR**.
 
 ## Use
 
+There are two ways to run the panel. Both read the same doctrine, personas and contract, so a finding means the same thing whichever produced it.
+
+### From Codex, Copilot CLI, or a shell: the `keri-review-panel` CLI
+
+Requirements: Node 20+, `git`, and `gh` (authenticated) for GitHub URLs; plus at least one agent CLI, `codex` or `claude`, logged in.
+
+```
+git clone https://github.com/dhh1128/keri-review-panel && cd keri-review-panel && ./install.sh
+```
+
+`install.sh` puts `keri-review-panel` on your PATH (`~/.local/bin`, or `$KRP_BIN_DIR`) and links `skill/` into `~/.agents/skills/`, where Codex and Copilot CLI discover skills. After that you can ask Codex to "run the keri review panel on <url>", or run it yourself:
+
+```
+keri-review-panel run --engine codex \
+  --proposal https://github.com/WebOfTrust/keripy/discussions/1515 \
+  --target ~/code/keripy --target ~/code/kswg-acdc-specification \
+  --personas auto
+```
+
+- `--proposal` takes a GitHub PR, issue or discussion URL, another URL, a file, pasted text, or `-` for stdin. It is fetched and snapshotted before any model sees it, so the run records exactly what was reviewed.
+- `--target` (repeatable) points at local checkouts that reviewers check claims against. Without targets the review still runs, but flags every claim it could not check.
+- `--personas` omitted runs SEC, SKP, SPC, GOV; `auto` picks lenses from the proposal; or name them, e.g. `SEC,KRT,CSR`.
+- `--engine-for KRT=claude` (or `VERIFY=claude`, `SUMMARY=codex`…) sends one persona or step to another engine. Verifying on a different lab's model than the reviewers is the cheapest way to decorrelate their blind spots.
+- `--dry-run` fetches and snapshots the proposal and prints the plan without calling a model. `--help` lists the rest.
+
+Output goes to `.ignored/keri-review-<date>-<milestone>/` under the current directory (never overwriting an earlier run): `reviews/` holds one report per persona plus the synthesis, `proposal/` the raw snapshot, `progress.log` a line per event (tail it while a run is going), `manifest.json` the findings, and `run.json` every agent call with its engine, timing and cost. A run takes roughly 3–8 minutes per persona, three at a time. Exit status 3 means the run is degraded (a persona or the summary failed); the synthesis and `run.json` say what.
+
+Reviewers run read-only (`codex exec --sandbox read-only`; Claude with read-only tools), and the runner writes every file. `DESIGN.md` explains the runner and how it differs from the Workflow below.
+
+### From Claude Code: the Workflow
+
 ```
 ./install.sh
 ```
@@ -56,7 +90,7 @@ args = {
 ```
 
 The panel writes per-persona reports + one synthesis to the run's `reviews/` directory and returns a
-deduped, triaged findings queue.
+deduped, triaged findings queue. The Workflow remains the Claude entry point until the CLI's `claude` backend is shown to produce equivalent results (see `DESIGN.md`).
 
 When a target is a keripy checkout, SEC also reads that checkout's `ref/ErrorHandling.md` live, if present. It states which exception types keripy's intake path catches and skips versus lets propagate, which decides whether a malformed peer message is dropped or crashes a service, so it is a security invariant rather than a style rule. keripy's naming and style conventions (`ref/naming.md`) are deliberately not loaded here; `upstream-pr` hands those to the `/code-review` step a keripy PR also owes.
 
@@ -82,7 +116,6 @@ When a target is a keripy checkout, SEC also reads that checkout's `ref/ErrorHan
 
 ### A note on cross-model perspective
 The KRT (relation-algebra) lens is the best candidate to run on a *non-Claude* model for genuine
-perspective variety, since its core skill is model-independent formal reasoning. It is authored on
-Claude here; to get an outside read, run its persona file + the proposal through `codex exec` or
-`gemini -p` and fold the result in. Model diversity buys reasoning variety, **not** KERI-correctness
+perspective variety, since its core skill is model-independent formal reasoning. With the CLI this is one flag:
+`--engine-for KRT=codex`. Model diversity buys reasoning variety, **not** KERI-correctness
 — that comes only from `keri-doctrine.md` and the re-anchoring discipline.
