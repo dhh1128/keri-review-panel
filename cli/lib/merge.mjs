@@ -7,7 +7,10 @@
 export const SEV = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
 const DISP = { 'recommend-reject': 0, 'recommend-revise': 1, 'needs-info': 2, 'recommend-accept': 3 }
 const CONF = { CONFIRMED: 0, LIKELY: 1, SPECULATIVE: 2 }
-const rank = (f) => [SEV[f.severity], DISP[f.recommended_disposition], CONF[f.confidence]]
+// A blocking claim (CRITICAL/HIGH recommending revise or reject) outranks any non-blocking one, even
+// of higher severity: a CRITICAL/recommend-accept must not hide a HIGH/recommend-reject.
+export const isBlocking = (f) => (f.severity === 'CRITICAL' || f.severity === 'HIGH') && ['recommend-revise', 'recommend-reject'].includes(f.recommended_disposition)
+const rank = (f) => [isBlocking(f) ? 0 : 1, SEV[f.severity], DISP[f.recommended_disposition], CONF[f.confidence]]
 function stronger(a, b) {
   const x = rank(a), y = rank(b)
   for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] < y[i]
@@ -47,6 +50,6 @@ export function applyGroups(items, groups) {
 export function dropRefuted(items) {
   const isRefuted = (c) => c.verification?.verdict === 'refuted'
   const refuted = items.flatMap((i) => i.constituents).filter(isRefuted)
-  const kept = items.map((i) => { const live = i.constituents.filter((c) => !isRefuted(c)); return live.length ? makeItem(live) : null }).filter(Boolean)
+  const kept = items.map((i) => { const live = i.constituents.filter((c) => !isRefuted(c)); return live.length ? makeItem(live) : null }).filter(Boolean).sort(bySeverity)
   return { items: kept, refuted }
 }

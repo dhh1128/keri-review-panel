@@ -126,8 +126,11 @@ export function reviewSemantics(result, persona) {
     if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(f.dedupe_key)) errs.push(`${f.id}: dedupe_key "${f.dedupe_key}" is not kebab-case`)
     // Report and manifest come back together so they cannot silently diverge; this is the check. A
     // heading naming the exact id is required — a substring would let SEC-F10 stand in for SEC-F1.
+    // The section must also have a body: a bare heading explains nothing.
     const esc = f.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    if (!new RegExp(`^#{2,4}\\s+${esc}(?![\\w-])`, 'm').test(result.report_markdown)) errs.push(`${f.id}: report_markdown has no section headed "### ${f.id}: ..." for this finding`)
+    const m = new RegExp(`^#{2,4}[ \\t]+${esc}(?![\\w-])[^\\n]*\\n([\\s\\S]*?)(?=^#{1,4}[ \\t]|(?![\\s\\S]))`, 'm').exec(result.report_markdown)
+    if (!m) errs.push(`${f.id}: report_markdown has no section headed "### ${f.id}: ..." for this finding`)
+    else if (m[1].replace(/\s+/g, '').length < 40) errs.push(`${f.id}: its report section is empty or nearly so; explain the finding there`)
   }
   return errs
 }

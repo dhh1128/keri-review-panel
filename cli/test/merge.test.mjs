@@ -49,3 +49,14 @@ test('constituents keep their own persona and objective for the verify gate', ()
   assert.equal(item.objective_function, 'survivability')
   assert.ok(item.constituents.some((c) => c.objective_function === 'invulnerability'))
 })
+
+test('a blocking claim outranks a non-blocking one of higher severity', () => {
+  const [item] = mergeByKey([f('A-F1', { severity: 'CRITICAL', recommended_disposition: 'recommend-accept' }), f('B-F1', { severity: 'HIGH', recommended_disposition: 'recommend-reject' })])
+  assert.equal(item.id, 'B-F1')
+})
+
+test('items are re-sorted after refuted claims are dropped', () => {
+  const items = mergeByKey([f('SEC-F1', { dedupe_key: 'a', severity: 'CRITICAL' }), f('SKP-F1', { dedupe_key: 'a', severity: 'LOW' }), f('GOV-F1', { dedupe_key: 'b', severity: 'HIGH' })])
+  items.find((i) => i.dedupe_key === 'a').constituents.find((c) => c.id === 'SEC-F1').verification = { verdict: 'refuted' }
+  assert.deepEqual(dropRefuted(items).items.map((i) => i.id), ['GOV-F1', 'SKP-F1'])
+})

@@ -13,7 +13,7 @@ import { homedir } from 'node:os'
 import { BACKENDS } from './lib/backends.mjs'
 import { REVIEW, NORMALIZE, SCOPE, DEDUPE, VERIFY, SUMMARY, validate, reviewSemantics } from './lib/schemas.mjs'
 import { fetchProposal } from './lib/fetch.mjs'
-import { mergeByKey, applyGroups, dropRefuted } from './lib/merge.mjs'
+import { mergeByKey, applyGroups, dropRefuted, isBlocking } from './lib/merge.mjs'
 
 const USAGE = `usage: keri-review-panel run --engine codex|claude --proposal <url|file|text|-> [options]
 
@@ -335,7 +335,7 @@ if (VERIFY_MODE !== 'off') {
   ;({ items, refuted } = dropRefuted(items))
   log(`verify: ${toVerify.filter((f) => f.verification?.verdict === 'confirmed').length} confirmed, ${refuted.length} refuted claims (excluded), ${toVerify.filter((f) => f.verification?.verdict === 'uncertain').length} uncertain`)
 }
-const blockers = items.filter((i) => (i.severity === 'CRITICAL' || i.severity === 'HIGH') && ['recommend-revise', 'recommend-reject'].includes(i.recommended_disposition))
+const blockers = items.filter(isBlocking)
 
 // ---------- summary ----------
 log('phase: summary')
