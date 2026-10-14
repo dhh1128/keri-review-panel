@@ -2,7 +2,7 @@
 
 Every persona reports findings in the shape defined here so the synthesis step can dedupe and
 adjudicate across lenses, and so the runner can consume a machine-readable manifest. This file is
-loaded by every persona and by the workflow runner. It is the contract; do not deviate from it.
+loaded by every persona and by the runner (`cli/keri-review-panel.mjs`). It is the contract; do not deviate from it.
 
 ---
 
@@ -66,8 +66,9 @@ doctrine is out of date). This is what keeps panel findings free of the doctrine
 
 ## §7. Report file — human-readable narrative
 
-Write your narrative report to `reviews/<persona-slug>-<run_label>.md` (create `reviews/` if
-needed; never `git add`/commit). Structure:
+Your narrative report belongs at `reviews/<persona-slug>-<run_label>.md`. Unattended, you are read-only:
+return the report as `report_markdown` alongside the §8 manifest, and the runner writes the file.
+Interactive, write it there yourself (create `reviews/` if needed; never `git add`/commit). Structure:
 
 ```markdown
 # <Persona> Review: <proposal short-name>

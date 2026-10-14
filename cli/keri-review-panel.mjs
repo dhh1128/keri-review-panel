@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-// Engine-neutral runner for the keri-review-panel. Owns all orchestration as code and makes each
-// agent call through a backend (codex | claude). See DESIGN.md for why it exists beside the
-// Claude Workflow (keri-review-panel.workflow.js), and where the two deliberately differ.
+// Engine-neutral runner for the keri-review-panel, and its only runner. Owns all orchestration as
+// code and makes each agent call through a backend (codex | claude). See DESIGN.md for why.
 
 import { parseArgs } from 'node:util'
 import { execFileSync } from 'node:child_process'
@@ -270,8 +269,8 @@ const perPersona = await pool(PERSONAS, CONCURRENCY, async (p) => {
     `(effort: ${conf.effort === 'high' ? 'deep' : conf.effort}, run_label: "${MILESTONE}"). You are read-only: do not create or modify any file.\n\n` +
     `LOAD, in order: ${PROMPTS_DIR}/keri-doctrine.md ; ${PROMPTS_DIR}/review-house-style.md ; ${PROMPTS_DIR}/orchestrating-reviews.md ; ` +
     `your persona ${PROMPTS_DIR}/personas/${p.slug}.md ; your depth reading ${PROMPTS_DIR}/reference/bible/ sections ${p.bible}.\n\n` +
-    `OVERRIDE for this run: your persona file and orchestrating-reviews.md §7 tell you to write your report to a file. Do not. Instead return ` +
-    `the complete narrative report, in exactly the §7 structure, as "report_markdown" in your structured output; the runner writes it. ` +
+    `As orchestrating-reviews.md §7 prescribes for unattended mode, write no file: return the complete narrative report, in exactly ` +
+    `the §7 structure, as "report_markdown" in your structured output; the runner writes it. ` +
     `Return the §8 manifest as "findings" in the same output. The two must agree: every finding in the manifest appears in the report.\n\n` +
     keripyIntakeFor(p.prefix) +
     `THE PROPOSAL UNDER REVIEW (normalized by the runner; the raw snapshot it came from, including any diff, is at ${RAW_PATH} — consult it when the normalized text is not enough):\n` +

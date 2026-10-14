@@ -3,7 +3,7 @@
 #
 # WHY THIS EXISTS, AND WHY IT IS NOT A RUN-TIME COPY.
 #
-# The panel is a deployed artifact: install.sh symlinks the workflow into ~/.claude/workflows/ and
+# The panel is a deployed artifact: install.sh puts its runner on PATH and its skill where agents find it, and
 # it runs from any checkout, including headless boxes where the keri-bible workspace is absent. So
 # the doctrine and the bible sections are VENDORED here, not read live from a sibling directory.
 # Two properties follow, both wanted:
@@ -15,7 +15,7 @@
 # The failure this fixes is not staleness per se -- it is SILENT staleness. Before 2026-09-01 the
 # sync was a hand copy with no record, and the vendored bible drifted three files behind without
 # anything saying so. Now: sync deliberately with this script, which stamps reference/SYNCED-FROM
-# with the source commit, and the workflow preflight reports that stamp into every run.
+# with the source commit, and the runner's preflight reports that stamp into every run.
 #
 # Usage:  ./sync-reference.sh [path-to-keri-bible] [--force]
 #         KERI_BIBLE=/path/to/keri-bible ./sync-reference.sh

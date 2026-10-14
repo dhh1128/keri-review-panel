@@ -5,7 +5,7 @@
 const FINDING = {
   type: 'object', additionalProperties: false,
   // bucket is required with no null: orchestrating-reviews.md §8 has every finding name which of the
-  // three it is. (The Workflow's schema left it optional; the contract does not.)
+  // three it is.
   required: ['id', 'persona', 'title', 'severity', 'confidence', 'dedupe_key', 'objective_function', 'layer', 'location', 'evidence', 'failure_scenario', 'recommended_disposition', 'bucket'],
   properties: {
     id: { type: 'string' }, persona: { type: 'string' }, title: { type: 'string' },

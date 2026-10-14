@@ -14,12 +14,11 @@ PKI / IAM / OAuth / blockchain / SD-JWT priors.
 | `review-house-style.md` | **Disposition spine.** The adversarial epistemics every persona shares (resist sycophancy, earn findings, no fence-sitting, steelman-before-you-strike). |
 | `orchestrating-reviews.md` | **Output contract.** Severity (adoption-obligation) and confidence semantics, `dedupe_key` convention, id prefixes, the re-anchoring rule, the findings manifest schema, and the synthesis contract. |
 | `personas/*.md` | The seven reviewer lenses (below). |
-| `keri-review-panel.workflow.js` | The Claude Code Workflow runner: normalize proposal → (optionally dispatch lenses) → review → verify → synthesize → persist. |
 | `freshness.sh` | Re-anchoring / staleness checker — greps each doctrine quote against live sources; fail-loud on drift. |
-| `cli/` | The engine-neutral runner (`keri-review-panel run`), with `codex` and `claude` backends. |
-| `skill/SKILL.md` | The skill Codex and Copilot CLI load; it starts the CLI and reports the result. |
-| `DESIGN.md` | Why the CLI exists beside the Workflow, what was decided and rejected, and what is unverified. |
-| `install.sh` | Symlinks the Workflow into `~/.claude/workflows/`, the CLI onto PATH and the skill into `~/.agents/skills/`, then runs `sync-reference.sh` (non-fatally). |
+| `cli/` | The runner (`keri-review-panel run`): fetch and snapshot the proposal → (optionally dispatch lenses) → review → merge and dedupe → verify → synthesize → persist, with `codex` and `claude` backends. |
+| `skill/SKILL.md` | The skill Claude Code, Codex and Copilot CLI load; it starts the runner and reports the result. |
+| `DESIGN.md` | Why the runner is shaped as it is, what was decided and rejected, and what is unverified. |
+| `install.sh` | Symlinks the runner onto PATH and the skill into `~/.agents/skills/` and `~/.claude/skills/`, then runs `sync-reference.sh` (non-fatally). |
 | `sync-reference.sh` | Refreshes `keri-doctrine.md` + `reference/` from the `keri-bible` workspace and stamps `reference/SYNCED-FROM` with the source commit. |
 | `reference/` | The `bible/` sections (depth reading each persona cites) + the assembled `keri-bible.md` + the decentralization-purity steering note. **Vendored, not read live** — see below. |
 | `reference/SYNCED-FROM` | Which `keri-bible` commit the vendored copy came from. The preflight reports it into every run's synthesis header. |
@@ -39,17 +38,13 @@ PRV, CSR**.
 
 ## Use
 
-There are two ways to run the panel. Both read the same doctrine, personas and contract, so a finding means the same thing whichever produced it.
-
-### From Codex, Copilot CLI, or a shell: the `keri-review-panel` CLI
-
 Requirements: Node 20+, `git`, and `gh` (authenticated) for GitHub URLs; plus at least one agent CLI, `codex` or `claude`, logged in.
 
 ```
 git clone https://github.com/dhh1128/keri-review-panel && cd keri-review-panel && ./install.sh
 ```
 
-`install.sh` puts `keri-review-panel` on your PATH (`~/.local/bin`, or `$KRP_BIN_DIR`) and links `skill/` into `~/.agents/skills/`, where Codex and Copilot CLI discover skills. After that you can ask Codex to "run the keri review panel on <url>", or run it yourself:
+`install.sh` puts `keri-review-panel` on your PATH (`~/.local/bin`, or `$KRP_BIN_DIR`) and links `skill/` into `~/.agents/skills/` (Codex, Copilot CLI) and `~/.claude/skills/` (Claude Code). After that you can ask your agent to "run the keri review panel on <url>", or run it yourself:
 
 ```
 keri-review-panel run --engine codex \
@@ -66,27 +61,7 @@ keri-review-panel run --engine codex \
 
 Output goes to `.ignored/keri-review-<date>-<milestone>/` under the current directory (never overwriting an earlier run): `reviews/` holds one report per persona plus the synthesis, `proposal/` the raw snapshot, `progress.log` a line per event (tail it while a run is going), `manifest.json` the findings, and `run.json` every agent call with its engine, timing and cost. A run takes roughly 3–8 minutes per persona, three at a time. Exit status 3 means the run is degraded (a persona or the summary failed); the synthesis and `run.json` say what.
 
-Reviewers run read-only (`codex exec --sandbox read-only`; Claude with read-only tools), and the runner writes every file. `DESIGN.md` explains the runner and how it differs from the Workflow below.
-
-### From Claude Code: the Workflow
-
-```
-./install.sh
-```
-
-Then invoke the `keri-review-panel` workflow with:
-
-```
-args = {
-  proposal: "<url | file path | pasted proposal text / email thread>",
-  targets:  ["/home/you/code/keripy", "/home/you/code/signify-ts", ...],  // repos/specs to cross-reference
-  baseDir:  "<absolute launching cwd>",        // for resolving relative targets
-  personas: ["SEC","KRT","GOV"] | "auto" | omit // omit = default four; "auto" = topic dispatch
-}
-```
-
-The panel writes per-persona reports + one synthesis to the run's `reviews/` directory and returns a
-deduped, triaged findings queue. The Workflow remains the Claude entry point until the CLI's `claude` backend is shown to produce equivalent results (see `DESIGN.md`).
+Reviewers run read-only (`codex exec --sandbox read-only`; Claude with read-only tools), and the runner writes every file. `DESIGN.md` explains why.
 
 When a target is a keripy checkout, SEC also reads that checkout's `ref/ErrorHandling.md` live, if present. It states which exception types keripy's intake path catches and skips versus lets propagate, which decides whether a malformed peer message is dropped or crashes a service, so it is a security invariant rather than a style rule. keripy's naming and style conventions (`ref/naming.md`) are deliberately not loaded here; `upstream-pr` hands those to the `/code-review` step a keripy PR also owes.
 

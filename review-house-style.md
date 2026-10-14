@@ -74,6 +74,6 @@ step merges by `dedupe_key`, with the most-obligated severity winning.
 
 - **interactive:** a human is present and will decide during or after the review. You may ask
   clarifying questions and adjudicate.
-- **unattended:** spawned by the runner with no human mid-run. Never block; write your report file
-  and return the findings manifest as your final message. Respect any `prior_dispositions` handed in
+- **unattended:** spawned by the runner with no human mid-run. Never block, and write no files; return your
+  report and the findings manifest together as structured output (orchestrating-reviews §7–§8). Respect any `prior_dispositions` handed in
   — do not re-litigate a resolved finding without new evidence.

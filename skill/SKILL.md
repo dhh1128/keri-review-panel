@@ -25,6 +25,8 @@ keri-review-panel run --engine <your engine: codex or claude> \
   > /tmp/krp-run.json 2> /tmp/krp-run.log &
 ```
 
+In Claude Code, drop the trailing `&` and start the command with the Bash tool's `run_in_background`, so you are notified when it exits instead of polling.
+
 Pass `--engine codex` if you are Codex, `--engine claude` if you are Claude. If you are another agent (Copilot, Cursor…), the reviewers still have to run on one of those two: use whichever `command -v codex claude` finds, and ask the user if both are present. `--engine-for KRT=claude` (or `VERIFY=claude`, etc.) sends one persona or step to the other engine, which is worth offering when both are installed: a finding refuted by a different lab's model than the one that raised it is better tested.
 
 The runner must be able to start its own agent processes. If you run inside a sandbox that blocks that (Codex in `workspace-write` blocks writes to `~/.codex` state), request escalation for this one command rather than working around it.

@@ -1,25 +1,32 @@
 #!/usr/bin/env bash
-# install.sh — symlink the keri-review-panel runner into ~/.claude/workflows/ so it can be invoked
-# by name, from any KERI-related checkout, exactly like origin-review-panel / editorial-panel.
+# install.sh — put the keri-review-panel runner on PATH and its skill where Claude Code, Codex and
+# Copilot CLI discover skills. Idempotent; symlinks only.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WF="$HOME/.claude/workflows"
-mkdir -p "$WF"
-ln -sfn "$DIR/keri-review-panel.workflow.js" "$WF/keri-review-panel.js"
-chmod +x "$DIR/freshness.sh" "$DIR/sync-reference.sh" 2>/dev/null || true
-echo "linked $WF/keri-review-panel.js -> $DIR/keri-review-panel.workflow.js"
+chmod +x "$DIR/freshness.sh" "$DIR/sync-reference.sh" "$DIR/cli/keri-review-panel.mjs" 2>/dev/null || true
 
-# The engine-neutral runner and its skill (see DESIGN.md). The skill goes where Codex and Copilot
-# CLI discover user skills; it is deliberately NOT linked into ~/.claude/skills while the Workflow
-# above remains the Claude entry point.
 BIN="${KRP_BIN_DIR:-$HOME/.local/bin}"
-mkdir -p "$BIN" "$HOME/.agents/skills"
-chmod +x "$DIR/cli/keri-review-panel.mjs"
+mkdir -p "$BIN"
 ln -sfn "$DIR/cli/keri-review-panel.mjs" "$BIN/keri-review-panel"
-ln -sfn "$DIR/skill" "$HOME/.agents/skills/keri-review-panel"
 echo "linked $BIN/keri-review-panel -> $DIR/cli/keri-review-panel.mjs"
-echo "linked $HOME/.agents/skills/keri-review-panel -> $DIR/skill"
 case ":$PATH:" in *":$BIN:"*) ;; *) echo "NOTE: $BIN is not on your PATH; add it, or set KRP_BIN_DIR to a directory that is." ;; esac
+
+# One skill for every host: ~/.agents/skills for Codex and Copilot CLI, ~/.claude/skills for Claude
+# Code (and the second Claude account's config dir, when this box has one).
+for d in "$HOME/.agents/skills" "$HOME/.claude/skills" "$HOME/.claude-provenant/skills"; do
+  case "$d" in "$HOME/.claude-provenant/"*) [ -d "$HOME/.claude-provenant" ] || continue ;; esac
+  mkdir -p "$d"
+  ln -sfn "$DIR/skill" "$d/keri-review-panel"
+  echo "linked $d/keri-review-panel -> $DIR/skill"
+done
+
+# The Claude Workflow runner was retired on 2026-10-14 (see DESIGN.md). Remove links an earlier
+# install left in .claude/workflows, but only ones that point into this repo.
+for l in "$HOME/.claude/workflows/keri-review-panel.js" "$HOME/.claude-provenant/workflows/keri-review-panel.js"; do
+  if [ -L "$l" ] && case "$(readlink "$l")" in "$DIR"/*) true ;; *) false ;; esac; then
+    rm "$l" && echo "removed retired workflow link $l"
+  fi
+done
 
 # Refresh the vendored doctrine/bible if the keri-bible workspace is here. Non-fatal: the panel is
 # meant to run standalone from what it vendors, so a box without keri-bible installs fine and uses
@@ -35,6 +42,4 @@ else
   echo "      Using the committed snapshot: $(sed -n 's/^commit: *//p' "$DIR/reference/SYNCED-FROM" 2>/dev/null || echo 'unstamped')"
 fi
 echo
-echo "Invoke from any repo with:  Workflow name 'keri-review-panel'"
-echo "  args = { proposal: <url|file|pasted text>, targets: [<repo/spec pointers>], baseDir: <launching cwd> }"
-echo "  optional: personas (array | 'auto' | omit=default SEC,SKP,SPC,GOV), milestone, outDir, verify"
+echo "Ask your agent to \"run the keri review panel on <url>\", or run: keri-review-panel run --help"
