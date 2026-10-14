@@ -4,7 +4,9 @@
 
 const FINDING = {
   type: 'object', additionalProperties: false,
-  required: ['id', 'persona', 'title', 'severity', 'confidence', 'dedupe_key', 'objective_function', 'layer', 'location', 'evidence', 'failure_scenario', 'recommended_disposition'],
+  // bucket is required with no null: orchestrating-reviews.md §8 has every finding name which of the
+  // three it is. (The Workflow's schema left it optional; the contract does not.)
+  required: ['id', 'persona', 'title', 'severity', 'confidence', 'dedupe_key', 'objective_function', 'layer', 'location', 'evidence', 'failure_scenario', 'recommended_disposition', 'bucket'],
   properties: {
     id: { type: 'string' }, persona: { type: 'string' }, title: { type: 'string' },
     severity: { enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] },
@@ -15,7 +17,7 @@ const FINDING = {
     location: { type: 'string' }, evidence: { type: 'string' },
     steelman: { type: ['string', 'null'] }, failure_scenario: { type: 'string' },
     recommended_disposition: { enum: ['recommend-revise', 'recommend-reject', 'recommend-accept', 'needs-info'] },
-    bucket: { enum: ['non-goal', 'proof-scope', 'deployment-gap', null] }, revisit_condition: { type: ['string', 'null'] },
+    bucket: { enum: ['non-goal', 'proof-scope', 'deployment-gap'] }, revisit_condition: { type: ['string', 'null'] },
   },
 }
 
@@ -122,8 +124,10 @@ export function reviewSemantics(result, persona) {
     seen.add(f.id)
     if (f.persona !== persona.slug) errs.push(`${f.id}: persona must be "${persona.slug}", got "${f.persona}"`)
     if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(f.dedupe_key)) errs.push(`${f.id}: dedupe_key "${f.dedupe_key}" is not kebab-case`)
-    // Report and manifest come back together so they cannot silently diverge; this is the check.
-    if (!result.report_markdown.includes(f.id) && !result.report_markdown.includes(f.title)) errs.push(`${f.id}: not found in report_markdown (cite each finding's id or exact title in the report)`)
+    // Report and manifest come back together so they cannot silently diverge; this is the check. A
+    // heading naming the exact id is required — a substring would let SEC-F10 stand in for SEC-F1.
+    const esc = f.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (!new RegExp(`^#{2,4}\\s+${esc}(?![\\w-])`, 'm').test(result.report_markdown)) errs.push(`${f.id}: report_markdown has no section headed "### ${f.id}: ..." for this finding`)
   }
   return errs
 }
