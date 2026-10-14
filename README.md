@@ -1,14 +1,10 @@
 # keri-review-panel
 
-A reusable, adversarial multi-persona review panel for **design proposals in the KERI / ACDC / CESR
+A reusable, adversarial multi-persona review panel for claude and codex that analyzes **design proposals in the KERI / ACDC / CESR
 ecosystem** — spec changes, GitHub discussions and PRs, worked examples, email threads, or ad-hoc
 proposals. Point it at a design argument and it stress-tests that argument from seven distinct
 disciplines, each reasoning **in KERI's own terms** rather than importing generic
 PKI / IAM / OAuth / blockchain / SD-JWT priors.
-
-It mirrors the architecture of `origin-review-panel` (code review) and `editorial-panel` (prose
-review): a shared spine, one file per persona, dedupe-by-key synthesis, adjudicated dispositions,
-and a Workflow runner.
 
 ## What's here
 
