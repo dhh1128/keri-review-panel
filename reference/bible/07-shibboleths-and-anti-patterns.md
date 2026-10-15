@@ -6,7 +6,7 @@ KERI corrects, point by point, the priors that PKI, IAM, blockchain and mainstre
 
 ## Status {#status}
 
-The chapter is about framings, so it carries markers only where the tier is load-bearing: where a correction lives on one specification branch and not the other, or where the evidence is code. Text only on a `v1.1` branch is not [spec], and an unmerged branch on a personal fork is not [code].
+The chapter is about framings, so it carries markers only where the kind of evidence is load-bearing: where a correction lives on one specification branch and not the other, or where the evidence is code. Text only on a `v1.1` branch is not [spec], and an unmerged branch on a personal fork is not [code].
 
 ## 1. How a shibboleth works here {#how-shibboleths-work}
 
@@ -284,7 +284,7 @@ Date a gap rather than assert it, because code moves too: landmines L16 and L17 
 
 ### The reflex is bidirectional {#bidirectional-reflex}
 
-A code comment about a specification is prose that borrows the code's credibility. keripy's now reads "E1E is normative on the spec's v1.1 branch (kswg-acdc-specification#197). It is absent from the 1.0 text currently under ToIP ratification" (keripy vdr/verifying.py, L40-41 @`80f77b73b`), correcting an earlier version that denied `E1E` any specification basis. This corpus's author wrote it (`d9ba3d9da`), so it is not independent evidence; the [spec-next] tier rests on the specification.
+A code comment about a specification is prose that borrows the code's credibility. keripy's now reads "E1E is normative on the spec's v1.1 branch (kswg-acdc-specification#197). It is absent from the 1.0 text currently under ToIP ratification" (keripy vdr/verifying.py, L40-41 @`80f77b73b`), correcting an earlier version that denied `E1E` any specification basis. This corpus's author wrote it (`d9ba3d9da`), so it is not independent evidence; the [spec-next] marker rests on the specification.
 
 ### keripy main is not the deployed stack {#main-not-deployed}
 

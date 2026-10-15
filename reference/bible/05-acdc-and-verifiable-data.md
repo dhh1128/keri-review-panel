@@ -94,7 +94,7 @@ Edge-groups take `AND` (default), `OR`, `NAND`, `NOR`, `AVG` and `WAVG` (ACDC sp
 
 #### The unary operators {#unary-operators}
 
-| Op | Spec gloss | Default | Tier |
+| Op | Spec gloss | Default | Marker |
 |---|---|---|---|
 | `I2I` | Issuer-To-Issuee: this ACDC's Issuer AID MUST be the Issuee AID of the far node | Yes (targeted far node) | [spec] |
 | `NI2I` | Not-Issuer-To-Issuee: no such requirement | Yes (untargeted far node) | [spec] |
@@ -156,7 +156,7 @@ A conformant edge can pass credential processing and fail grant verification; th
 
 Where the state issues both credentials, `I2I` is wrong: "Its required `coreIdentity` edge links to Core with `E1E` and `NI2I`." (bakobo/schema `sedi-age/index.md`, L3 @`cfcbdcc7a`), as Sam's fixture builds it (keripy `tests/sedi/test_sedi.py`, L4360). Choose the operator that states the relation rather than dropping the edge; the older advice in Bakobo's decision record to bind at presentation instead predates `E1E`.
 
-#### The tier caution survives {#e1e-tier-caution}
+#### E1E still rests on a forward branch {#e1e-tier-caution}
 
 No operator in `main` binds two state-issued credentials about one subject, so a schema that requires `E1E`, as bakobo's `sedi-guardian` `citizen` edge does (bakobo/schema `sedi-guardian.schema.json`, L284, L317), builds on a forward branch; Sam's Age schema leaves the operator unconstrained (keripy `tests/sedi/test_sedi.py`, L1520-1527). The `NI2I` beside `E1E` makes the list mean "same issuee, issuer unconstrained" under either branch's gate.
 

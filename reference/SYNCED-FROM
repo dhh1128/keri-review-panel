@@ -1,5 +1,5 @@
 source:  keri-bible
-commit:  a78391a
+commit:  2ff6904
 date:    2026-10-15
-subject: Merge sources: consolidate the source manifest and teach freshness and detect the new formats
+subject: Retire the word tier where it meant a provenance marker
 path:    /home/daniel/code/me/keri-bible

@@ -1076,7 +1076,7 @@ Edge-groups take `AND` (default), `OR`, `NAND`, `NOR`, `AVG` and `WAVG` (ACDC sp
 
 #### The unary operators {#05-unary-operators}
 
-| Op | Spec gloss | Default | Tier |
+| Op | Spec gloss | Default | Marker |
 |---|---|---|---|
 | `I2I` | Issuer-To-Issuee: this ACDC's Issuer AID MUST be the Issuee AID of the far node | Yes (targeted far node) | [spec] |
 | `NI2I` | Not-Issuer-To-Issuee: no such requirement | Yes (untargeted far node) | [spec] |
@@ -1138,7 +1138,7 @@ A conformant edge can pass credential processing and fail grant verification; th
 
 Where the state issues both credentials, `I2I` is wrong: "Its required `coreIdentity` edge links to Core with `E1E` and `NI2I`." (bakobo/schema `sedi-age/index.md`, L3 @`cfcbdcc7a`), as Sam's fixture builds it (keripy `tests/sedi/test_sedi.py`, L4360). Choose the operator that states the relation rather than dropping the edge; the older advice in Bakobo's decision record to bind at presentation instead predates `E1E`.
 
-#### The tier caution survives {#05-e1e-tier-caution}
+#### E1E still rests on a forward branch {#05-e1e-tier-caution}
 
 No operator in `main` binds two state-issued credentials about one subject, so a schema that requires `E1E`, as bakobo's `sedi-guardian` `citizen` edge does (bakobo/schema `sedi-guardian.schema.json`, L284, L317), builds on a forward branch; Sam's Age schema leaves the operator unconstrained (keripy `tests/sedi/test_sedi.py`, L1520-1527). The `NI2I` beside `E1E` makes the list mean "same issuee, issuer unconstrained" under either branch's gate.
 
@@ -1618,7 +1618,7 @@ KERI corrects, point by point, the priors that PKI, IAM, blockchain and mainstre
 
 ## Status {#07-status}
 
-The chapter is about framings, so it carries markers only where the tier is load-bearing: where a correction lives on one specification branch and not the other, or where the evidence is code. Text only on a `v1.1` branch is not [spec], and an unmerged branch on a personal fork is not [code].
+The chapter is about framings, so it carries markers only where the kind of evidence is load-bearing: where a correction lives on one specification branch and not the other, or where the evidence is code. Text only on a `v1.1` branch is not [spec], and an unmerged branch on a personal fork is not [code].
 
 ## 1. How a shibboleth works here {#07-how-shibboleths-work}
 
@@ -1896,7 +1896,7 @@ Date a gap rather than assert it, because code moves too: landmines L16 and L17 
 
 ### The reflex is bidirectional {#07-bidirectional-reflex}
 
-A code comment about a specification is prose that borrows the code's credibility. keripy's now reads "E1E is normative on the spec's v1.1 branch (kswg-acdc-specification#197). It is absent from the 1.0 text currently under ToIP ratification" (keripy vdr/verifying.py, L40-41 @`80f77b73b`), correcting an earlier version that denied `E1E` any specification basis. This corpus's author wrote it (`d9ba3d9da`), so it is not independent evidence; the [spec-next] tier rests on the specification.
+A code comment about a specification is prose that borrows the code's credibility. keripy's now reads "E1E is normative on the spec's v1.1 branch (kswg-acdc-specification#197). It is absent from the 1.0 text currently under ToIP ratification" (keripy vdr/verifying.py, L40-41 @`80f77b73b`), correcting an earlier version that denied `E1E` any specification basis. This corpus's author wrote it (`d9ba3d9da`), so it is not independent evidence; the [spec-next] marker rests on the specification.
 
 ### keripy main is not the deployed stack {#07-main-not-deployed}
 
@@ -2402,7 +2402,7 @@ The latest-event rule fails on any AID that has anchored something without rotat
 
 [proposal] Sam states the rule in a conversation, not a specification: "The seal reference should be to the keystate determined by the latest establishment event." and "These type of checks should always be aginst the Kever instance" (keripy conversations > PR #1658, https://github.com/WebOfTrust/keripy/pull/1658#issuecomment-5514292225, comment of 2026-09-02, R-003). He withdrew the same comment's allowance for a later interaction event: "My bad halfway through the writeup I forgot this was a signature group code not a seal reference." (keripy conversations > issue #1667, https://github.com/WebOfTrust/keripy/issues/1667#issuecomment-5516149525, comment of 2026-09-02). For a seal reference the rule differs: "When the authentication factor is a seal reference then its always pointing to the exact event that holds the anchoring seal" (same). Issue #1667's title, "KRAM: accept a tsg reference that names an interaction event after the last establishment event", describes the case he withdrew. Behavior under delegated, superseding and recovery establishment is unexamined.
 
-## 5. Normative status: the tier that is empty {#09-normative-status}
+## 5. Normative status: no specification text {#09-normative-status}
 
 KRAM is in no KERI specification, so nothing here is [spec]. At `trustoverip/kswg-keri-specification` `main` @`fbdd4a615` a search for `kram` finds nothing under `spec/`; its one hit is a glossary entry pulled from `trustoverip/kerisuite-glossary` (KERI spec `specs.json`, L26): "All requests from a web client must use KRAM (KERI Request Authentication Method) for replay attack protection. The method is essentially based on each request body needing to include a date time string field in ISO-8601 format that must be within an acceptable time window relative to the server's date time," The ACDC and CESR specifications were searched without a pin, so their negative is unverified.
 
