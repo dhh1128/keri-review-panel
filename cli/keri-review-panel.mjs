@@ -5,7 +5,7 @@
 import { parseArgs } from 'node:util'
 import { execFileSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
@@ -17,7 +17,7 @@ import { mergeByKey, applyGroups, dropRefuted, isBlocking } from './lib/merge.mj
 const USAGE = `usage: keri-review-panel run --engine codex|claude --proposal <url|file|text|-> [options]
 
   --target <path>            repo/spec the proposal touches (repeatable); relative to --base-dir
-  --personas <list|auto>     comma list of SEC,KRT,PRV,SPC,SKP,GOV,CSR; "auto" = topic dispatch;
+  --personas <list|auto>     comma list of SEC,KRT,PRV,SPC,SKP,GOV,CSR,OPS; "auto" = topic dispatch;
                              default SEC,SKP,SPC,GOV
   --engine-for <K=engine>    per-role engine (repeatable); K is a persona prefix or one of
                              normalize, scope, dedupe, verify, summary. e.g. --engine-for KRT=codex
@@ -68,22 +68,37 @@ if (!['default', 'all', 'off'].includes(VERIFY_MODE)) die('--verify must be defa
 const TIMEOUT_MS = (Number(opts.timeout) || 40) * 60_000
 const PROMPTS_DIR = dirname(dirname(realpathSync(fileURLToPath(import.meta.url))))
 
+// `bible` is the only lens routing: which reference/bible/ chapters each persona reads in depth. The
+// doctrine stopped routing on 2026-10-15, so a chapter missing here is a chapter no persona reads.
+// Each list is what the persona needs, not everything that touches its lens; most chapters cross-link.
 const ALL_PERSONAS = [
-  { slug: 'protocol-security-verifier-realist', prefix: 'SEC', name: 'Protocol Security & Verifier Realist', bible: '02, 03, 07, 09', effort: 'deep' },
-  { slug: 'kr-relation-algebra-theorist', prefix: 'KRT', name: 'Knowledge-Representation & Relation-Algebra Theorist', bible: '05, 06, 07, 08', effort: 'deep' },
-  { slug: 'privacy-correlation-resistance-specialist', prefix: 'PRV', name: 'Privacy & Correlation-Resistance Specialist', bible: '06, 05, 07, 10', effort: 'medium' },
-  { slug: 'spec-precision-language-designer', prefix: 'SPC', name: 'Spec-Precision & Language Designer', bible: '01, 04, 07, 09', effort: 'medium' },
-  { slug: 'first-principles-skeptic', prefix: 'SKP', name: 'First-Principles Skeptic', bible: '02, 01, 07, 10', effort: 'medium' },
-  { slug: 'governance-interop-lifecycle-architect', prefix: 'GOV', name: 'Governance, Interop & Lifecycle Architect', bible: '06, 05, 07, 10', effort: 'medium' },
-  { slug: 'cesr-wire-serialization-engineer', prefix: 'CSR', name: 'CESR / Wire-Format & Serialization Engineer', bible: '04, 03, 07, 09', effort: 'medium' },
+  { slug: 'protocol-security-verifier-realist', prefix: 'SEC', name: 'Protocol Security & Verifier Realist', bible: ['02', '03', '07', '09', '11', '13'], effort: 'deep' },
+  { slug: 'kr-relation-algebra-theorist', prefix: 'KRT', name: 'Knowledge-Representation & Relation-Algebra Theorist', bible: ['05', '06', '07', '08'], effort: 'deep' },
+  { slug: 'privacy-correlation-resistance-specialist', prefix: 'PRV', name: 'Privacy & Correlation-Resistance Specialist', bible: ['06', '05', '07', '10', '12'], effort: 'medium' },
+  { slug: 'spec-precision-language-designer', prefix: 'SPC', name: 'Spec-Precision & Language Designer', bible: ['01', '04', '07', '09'], effort: 'medium' },
+  { slug: 'first-principles-skeptic', prefix: 'SKP', name: 'First-Principles Skeptic', bible: ['02', '01', '07', '10', '14'], effort: 'medium' },
+  { slug: 'governance-interop-lifecycle-architect', prefix: 'GOV', name: 'Governance, Interop & Lifecycle Architect', bible: ['06', '05', '07', '10', '13', '14'], effort: 'medium' },
+  { slug: 'cesr-wire-serialization-engineer', prefix: 'CSR', name: 'CESR / Wire-Format & Serialization Engineer', bible: ['04', '03', '07', '09'], effort: 'medium' },
+  { slug: 'operations-infrastructure-realist', prefix: 'OPS', name: 'Operations & Infrastructure Realist', bible: ['11', '02', '03', '07'], effort: 'medium' },
 ]
 const NAME_TO_PREFIX = {
   sec: 'SEC', security: 'SEC', krt: 'KRT', kr: 'KRT', 'relation-algebra': 'KRT', prv: 'PRV', privacy: 'PRV',
   spc: 'SPC', spec: 'SPC', 'spec-precision': 'SPC', skp: 'SKP', skeptic: 'SKP', gov: 'GOV', governance: 'GOV',
-  interop: 'GOV', csr: 'CSR', cesr: 'CSR', wire: 'CSR',
+  interop: 'GOV', csr: 'CSR', cesr: 'CSR', wire: 'CSR', ops: 'OPS', operations: 'OPS', infrastructure: 'OPS', infra: 'OPS',
 }
 const toPrefix = (t) => NAME_TO_PREFIX[String(t).toLowerCase().trim()] || String(t).toUpperCase().trim()
 const VALID = new Set(ALL_PERSONAS.map((p) => p.prefix))
+// Resolve each persona's chapter numbers to the vendored files once, so a routing entry that names a
+// chapter the sync no longer vendors fails here, before any model is paid, instead of mid-review.
+const BIBLE_DIR = join(PROMPTS_DIR, 'reference', 'bible')
+const BIBLE_FILES = existsSync(BIBLE_DIR) ? readdirSync(BIBLE_DIR).filter((f) => /^\d\d-.*\.md$/.test(f)).sort() : []
+for (const p of ALL_PERSONAS) {
+  p.bibleFiles = p.bible.map((nn) => BIBLE_FILES.find((f) => f.startsWith(`${nn}-`)))
+  const missing = p.bible.filter((nn, i) => !p.bibleFiles[i])
+  if (missing.length) die(`persona ${p.prefix} routes to bible chapter(s) ${missing.join(', ')}, which ${BIBLE_DIR} does not have; run ./sync-reference.sh or fix ALL_PERSONAS`)
+}
+const LEGEND = join(PROMPTS_DIR, 'reference', 'LEGEND.md')
+if (!existsSync(LEGEND)) die(`${LEGEND} is missing; run ./sync-reference.sh`)
 const DEFAULT_PREFIXES = ['SEC', 'SKP', 'SPC', 'GOV']
 const AUTO_SCOPE = opts.personas === 'auto'
 let wanted = AUTO_SCOPE ? null : opts.personas ? opts.personas.split(',').map(toPrefix).filter(Boolean) : DEFAULT_PREFIXES
@@ -211,10 +226,12 @@ writeFileSync(join(OUT, 'proposal', 'meta.json'), JSON.stringify(proposalMeta, n
 log(`proposal: ${snap.kind} ${snap.source} (${snap.text.length} chars, sha256 ${proposalMeta.sha256.slice(0, 12)})${snap.meta.incomplete ? ' — WARNING: discussion has more comments than were fetched' : ''}`)
 const targetsBlock = goodTargets.length ? goodTargets.map((t) => `${t.resolved} (${t.kind}${t.head ? ` @ ${t.head}` : ''})`).join(', ') : '(none supplied — reason from the proposal + doctrine; flag where a code/spec check is needed but unavailable)'
 log(`targets: ${targetsBlock}`)
+log(`legend: ${LEGEND}`)
 
 if (opts['dry-run']) {
   const plan = AUTO_SCOPE ? 'auto (decided by the scope call)' : ALL_PERSONAS.filter((p) => wanted.includes(p.prefix)).map((p) => `${p.prefix}=${roleConf(p.prefix, { effort: p.effort }).engine}/${roleConf(p.prefix, { effort: p.effort }).effort}`).join(', ')
   log(`dry run: personas ${plan}; verify ${VERIFY_MODE}${VERIFY_MODE !== 'off' ? ` on ${roleConf('VERIFY').engine}` : ''}. No model calls made.`)
+  if (!AUTO_SCOPE) for (const p of ALL_PERSONAS.filter((p) => wanted.includes(p.prefix))) log(`  ${p.prefix} loads: bible ${p.bible.join(', ')} + legend`)
   console.log(JSON.stringify({ dryRun: true, out: OUT, proposal: proposalMeta, targets, doctrine: DOCTRINE }, null, 2))
   process.exit(0)
 }
@@ -241,7 +258,8 @@ if (AUTO_SCOPE) {
     `Pick which review lenses are LOAD-BEARING for this KERI design proposal. Read each persona's "Trigger topics" ` +
     `in ${PROMPTS_DIR}/personas/*.md, then map the proposal to lenses. Always include SEC and SKP (broadly load-bearing). ` +
     `Add others only where the proposal genuinely triggers them (e.g. edges/operators -> KRT; disclosure/correlation -> PRV; ` +
-    `new spec notation/defaults -> SPC; EGF/cross-ecosystem/versioning -> GOV; new CESR primitive/wire change -> CSR). Skip a lens with a reason ` +
+    `new spec notation/defaults -> SPC; EGF/cross-ecosystem/versioning/authority chains -> GOV; new CESR primitive/wire change -> CSR; ` +
+    `witness pools/watchers/mailboxes/discovery/registrars/deployment -> OPS). Skip a lens with a reason ` +
     `when the proposal has no surface for it.\n\nLenses: ${catalog}.\n\n${fence('PROPOSAL', NORMALIZED)}\n\n` +
     `Return {personas:[prefixes to RUN], skipped:[{prefix, reason}]}. Use only: ${[...VALID].join(', ')}.`, SCOPE)
   const chosen = sc.ok ? [...new Set(sc.value.personas.map(toPrefix).filter((x) => VALID.has(x)))] : []
@@ -267,8 +285,11 @@ const perPersona = await pool(PERSONAS, CONCURRENCY, async (p) => {
   const r = await callAgent(p.prefix, `review:${p.prefix}`,
     `You are the ${p.name} (${p.prefix}) persona of the keri-review-panel, reviewing a DESIGN proposal in UNATTENDED mode ` +
     `(effort: ${conf.effort === 'high' ? 'deep' : conf.effort}, run_label: "${MILESTONE}"). You are read-only: do not create or modify any file.\n\n` +
-    `LOAD, in order: ${PROMPTS_DIR}/keri-doctrine.md ; ${PROMPTS_DIR}/review-house-style.md ; ${PROMPTS_DIR}/orchestrating-reviews.md ; ` +
-    `your persona ${PROMPTS_DIR}/personas/${p.slug}.md ; your depth reading ${PROMPTS_DIR}/reference/bible/ sections ${p.bible}.\n\n` +
+    `LOAD, in order: ${PROMPTS_DIR}/keri-doctrine.md ; ${LEGEND} (the provenance markers [spec], [spec-next], [code], [proposal], ` +
+    `[practice], [architect] that the chapters carry) ; ${PROMPTS_DIR}/review-house-style.md ; ${PROMPTS_DIR}/orchestrating-reviews.md ; ` +
+    `your persona ${PROMPTS_DIR}/personas/${p.slug}.md ; your depth reading, the bible chapters ${p.bibleFiles.map((f) => join(BIBLE_DIR, f)).join(' ; ')}. ` +
+    `Ground findings in the bible section a doctrine rule links to, or the primary source that section quotes, never in the doctrine itself. ` +
+    `Cite a bible section as "chapter NN, section N.N (#anchor)" with an anchor that exists in that chapter; refer to a doctrine rule as "doctrine rule N (#section-anchor)".\n\n` +
     `As orchestrating-reviews.md §7 prescribes for unattended mode, write no file: return the complete narrative report, in exactly ` +
     `the §7 structure, as "report_markdown" in your structured output; the runner writes it. ` +
     `Return the §8 manifest as "findings" in the same output. The two must agree: every finding in the manifest appears in the report.\n\n` +

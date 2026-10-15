@@ -1,6 +1,6 @@
 ---
 name: keri-review-panel
-description: Adversarial multi-persona review of a KERI / ACDC / CESR design proposal — a GitHub PR, issue or discussion, a spec change, a worked example, a file, or pasted text. Seven reviewer lenses (security, relation algebra, privacy, spec precision, first-principles skepticism, governance/interop, CESR wire format) reason in KERI's own terms, findings are deduplicated and the high-stakes ones adversarially verified, and a synthesis with a triaged findings table is written to disk. Use when asked to review, stress-test or critique a KERI/ACDC/CESR design or proposal, or to run the keri review panel.
+description: Adversarial multi-persona review of a KERI / ACDC / CESR design proposal — a GitHub PR, issue or discussion, a spec change, a worked example, a file, or pasted text. Eight reviewer lenses (security, relation algebra, privacy, spec precision, first-principles skepticism, governance/interop, CESR wire format, operations and infrastructure) reason in KERI's own terms, findings are deduplicated and the high-stakes ones adversarially verified, and a synthesis with a triaged findings table is written to disk. Use when asked to review, stress-test or critique a KERI/ACDC/CESR design or proposal, or to run the keri review panel.
 ---
 
 # keri-review-panel
@@ -11,7 +11,7 @@ You do not perform this review yourself. A runner does it, by launching one head
 
 - **proposal** (required): a URL (GitHub PR, issue or discussion), a file path, or pasted text. For long pasted text, write it to a file first and pass the path.
 - **targets**: local checkouts the proposal touches, so reviewers can check claims against real code and specs — e.g. a `keripy`, `keria`, `signify-ts` or `kswg-*-specification` checkout. Ask the user where their checkouts are if you cannot find them; a review without targets still runs, but flags every claim it could not check.
-- **personas**: omit for the default four (SEC, SKP, SPC, GOV); `auto` to let the panel pick from the proposal's topic; or a comma list from SEC, KRT, PRV, SPC, SKP, GOV, CSR.
+- **personas**: omit for the default four (SEC, SKP, SPC, GOV); `auto` to let the panel pick from the proposal's topic; or a comma list from SEC, KRT, PRV, SPC, SKP, GOV, CSR, OPS.
 
 If the user did not say which proposal, ask. Do not guess.
 

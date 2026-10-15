@@ -53,7 +53,8 @@ the same issue emit the *same* key and it merges. Key the root cause, not the le
 Each persona prefixes its finding ids with its tag: **SEC-** (Protocol Security & Verifier Realist),
 **KRT-** (Knowledge-Representation & Relation-Algebra), **PRV-** (Privacy & Correlation-Resistance),
 **SPC-** (Spec-Precision & Language Designer), **SKP-** (First-Principles Skeptic), **GOV-**
-(Governance, Interop & Lifecycle), **CSR-** (CESR / Wire-Format & Serialization). E.g. `SEC-F1`.
+(Governance, Interop & Lifecycle), **CSR-** (CESR / Wire-Format & Serialization), OPS- (Operations
+& Infrastructure). E.g. `SEC-F1`.
 
 ## §6. Re-anchoring — citations are hints until re-confirmed
 
