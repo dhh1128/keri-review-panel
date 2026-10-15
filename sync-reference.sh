@@ -17,6 +17,15 @@
 # anything saying so. Now: sync deliberately with this script, which stamps reference/SYNCED-FROM
 # with the source commit, and the runner's preflight reports that stamp into every run.
 #
+# What it vendors: bible/*.md as reference/bible/ (deletions propagate), keri-doctrine.md at the repo
+# root, the assembled keri-bible.md, the decentralization-purity steering note, and the provenance-marker
+# legend as reference/LEGEND.md. The legend is extracted from keri-bible's docs/house-style.md, the single
+# place it is written (build-bible.py takes it from there too), so a persona that loads single chapters
+# can read the markers they carry. The doctrine links each rule to `bible/NN-...md#anchor`; here the
+# chapters live under reference/bible/, so those links are rewritten to `reference/bible/...` on copy.
+# Rewriting is simpler than moving the doctrine under reference/: the runner, the verify step, the
+# skill and every persona load it from the repo root, and one sed keeps all of them unchanged.
+#
 # Usage:  ./sync-reference.sh [path-to-keri-bible] [--force]
 #         KERI_BIBLE=/path/to/keri-bible ./sync-reference.sh
 set -euo pipefail
@@ -75,7 +84,38 @@ copy() { # copy <src> <dst> <label>
   changed=$((changed+1))
 }
 
-copy "$SRC/keri-doctrine.md" "$DIR/keri-doctrine.md" "keri-doctrine.md"
+# install <generated-file> <dst> <label>: like copy, for a file this script derived from upstream.
+install_gen() {
+  if [ -f "$2" ] && cmp -s "$1" "$2"; then rm -f "$1"; return; fi
+  mv "$1" "$2"
+  echo "  updated: $3"
+  changed=$((changed+1))
+}
+
+# The doctrine, with its chapter links pointed at where the chapters are vendored, and its pointer to
+# the legend pointed at the vendored legend.
+TMP="$(mktemp)"
+sed -e 's#](bible/#](reference/bible/#g' \
+    -e 's#defined in the legend at the top of `keri-bible.md`#defined in the legend at `reference/LEGEND.md`#' \
+    "$SRC/keri-doctrine.md" > "$TMP"
+install_gen "$TMP" "$DIR/keri-doctrine.md" "keri-doctrine.md (links rewritten to reference/bible/)"
+
+# The provenance-marker legend, from docs/house-style.md's "Provenance markers" section.
+if [ -f "$SRC/docs/house-style.md" ] && grep -q '^## Provenance markers' "$SRC/docs/house-style.md"; then
+  TMP="$(mktemp)"
+  {
+    echo '# Provenance markers {#legend}'
+    echo
+    echo 'Vendored from keri-bible docs/house-style.md by sync-reference.sh; edit it there.'
+    awk '/^## Provenance markers/{on=1; next} on && /^## /{exit} on' "$SRC/docs/house-style.md" \
+      | sed -e 's# This section is the legend that `build-bible.py` and the site generate from.##'
+  } > "$TMP"
+  install_gen "$TMP" "$DIR/reference/LEGEND.md" "reference/LEGEND.md"
+else
+  echo "ERROR: no '## Provenance markers' section in $SRC/docs/house-style.md; cannot vendor the legend." >&2
+  exit 4
+fi
+
 copy "$SRC/keri-bible.md" "$DIR/reference/keri-bible.md" "reference/keri-bible.md"
 copy "$SRC/DECENTRALIZATION-PURITY-STEERING.md" "$DIR/reference/DECENTRALIZATION-PURITY-STEERING.md" "reference/DECENTRALIZATION-PURITY-STEERING.md"
 for f in "$SRC"/bible/*.md; do
