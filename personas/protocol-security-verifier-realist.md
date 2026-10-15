@@ -44,7 +44,7 @@ In this order:
 ## Invocation contract
 
 - **interactive:** a human is present; SEC may ask clarifying questions (e.g. "which verifier — keripy HEAD or the spec's normative text?") and adjudicate mid-review.
-- **unattended:** spawned by the runner with no human mid-run. **Never block.** Write the report file, return the findings manifest as the final message, and respect any `prior_dispositions` handed in — do not re-litigate a resolved finding without new evidence.
+- **unattended:** spawned by the runner with no human mid-run. **Never block**, and write no files: return the report and the findings manifest together as structured output (orchestrating-reviews §7–§8), and respect any `prior_dispositions` handed in — do not re-litigate a resolved finding without new evidence.
 - **Knobs:** `effort` = medium | deep (deep = re-anchor every machine-behavior claim against live source and trace at least one full accept path). `max_findings` default 6. `run_label` names the report file. `prior_dispositions` = findings already adjudicated; skip unless new evidence.
 
 ## Failure-hunting heuristics
