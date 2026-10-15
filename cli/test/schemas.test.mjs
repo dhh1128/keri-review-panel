@@ -12,12 +12,16 @@ test('canonical form requires every property and keeps optional ones nullable', 
   assert.ok(!c.properties.bucket.enum.includes(null))
 })
 
-test('bucket must be one of the three contract values', () => {
+test('bucket must be one of the four contract values', () => {
   const bad = { report_markdown: '### SEC-F1: t', findings: [{ ...finding('SEC-F1'), bucket: 'banana' }] }
   assert.ok(validate(REVIEW, bad).some((e) => e.includes('bucket')))
   const missing = { report_markdown: '### SEC-F1: t', findings: [finding('SEC-F1')] }
   delete missing.findings[0].bucket
   assert.ok(validate(REVIEW, missing).some((e) => e.includes('bucket: missing')))
+  for (const bucket of ['defect', 'deployment-gap', 'proof-scope', 'non-goal']) {
+    const ok = { report_markdown: '### SEC-F1: t', findings: [{ ...finding('SEC-F1'), bucket }] }
+    assert.deepEqual(validate(REVIEW, ok), [], bucket)
+  }
 })
 
 test('SEC-F10 in the report does not satisfy SEC-F1', () => {

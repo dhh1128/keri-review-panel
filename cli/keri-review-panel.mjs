@@ -300,7 +300,7 @@ const perPersona = await pool(PERSONAS, CONCURRENCY, async (p) => {
     `never cite a doctrine line number you have not re-confirmed): ${targetsBlock}.\n\n` +
     `Do your review exactly as your persona file and orchestrating-reviews.md prescribe: steelman first, then find only real, ` +
     `grounded findings ("nothing in my lens" with an empty findings array is a valid answer when it is honest), each with objective_function + layer + the ` +
-    `non-goal/proof-scope/deployment-gap bucket, and run the pre-ship sneer-test self-check. Use id prefix "${p.prefix}-", persona "${p.slug}", and the ` +
+    `bucket (defect/deployment-gap/proof-scope/non-goal), and run the pre-ship sneer-test self-check. Use id prefix "${p.prefix}-", persona "${p.slug}", and the ` +
     `dedupe_key convention (kebab-case; name the ISSUE, not the symptom, so sibling lenses merge). In report_markdown, head each finding's section with its full id, e.g. "### ${p.prefix}-F1: <title>".`,
     REVIEW, { effort: p.effort, readDirs, semantics: (v) => reviewSemantics(v, p) })
   writeFileSync(join(OUT, 'raw', `${p.prefix}.json`), JSON.stringify(r, null, 2))

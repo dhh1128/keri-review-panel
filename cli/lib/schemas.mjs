@@ -5,7 +5,8 @@
 const FINDING = {
   type: 'object', additionalProperties: false,
   // bucket is required with no null: orchestrating-reviews.md §8 has every finding name which of the
-  // three it is.
+  // doctrine evidence standard's four kinds of weakness it is: a defect in the specification or the
+  // code, a gap in deployment or ecosystem maturity, a limit on what a proof covers, a deliberate non-goal.
   required: ['id', 'persona', 'title', 'severity', 'confidence', 'dedupe_key', 'objective_function', 'layer', 'location', 'evidence', 'failure_scenario', 'recommended_disposition', 'bucket'],
   properties: {
     id: { type: 'string' }, persona: { type: 'string' }, title: { type: 'string' },
@@ -17,7 +18,7 @@ const FINDING = {
     location: { type: 'string' }, evidence: { type: 'string' },
     steelman: { type: ['string', 'null'] }, failure_scenario: { type: 'string' },
     recommended_disposition: { enum: ['recommend-revise', 'recommend-reject', 'recommend-accept', 'needs-info'] },
-    bucket: { enum: ['non-goal', 'proof-scope', 'deployment-gap'] }, revisit_condition: { type: ['string', 'null'] },
+    bucket: { enum: ['defect', 'deployment-gap', 'proof-scope', 'non-goal'] }, revisit_condition: { type: ['string', 'null'] },
   },
 }
 

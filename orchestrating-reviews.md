@@ -114,7 +114,7 @@ findings:
     steelman: "one line: the strongest reading of what the author intended"
     failure_scenario: "concrete inputs/state -> wrong output, interop break, or semantic ambiguity"
     recommended_disposition: recommend-revise  # recommend-revise | recommend-reject | recommend-accept | needs-info
-    bucket: deployment-gap    # non-goal | proof-scope | deployment-gap  (which of the three; §What-counts)
+    bucket: deployment-gap    # defect | deployment-gap | proof-scope | non-goal  (which of the four kinds of weakness; keri-doctrine.md Evidence standard)
     revisit_condition: null
 ```
 
