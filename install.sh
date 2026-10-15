@@ -3,7 +3,7 @@
 # Copilot CLI discover skills. Idempotent; symlinks only.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-chmod +x "$DIR/freshness.sh" "$DIR/sync-reference.sh" "$DIR/cli/keri-review-panel.mjs" 2>/dev/null || true
+chmod +x "$DIR/sync-reference.sh" "$DIR/cli/keri-review-panel.mjs" 2>/dev/null || true
 
 BIN="${KRP_BIN_DIR:-$HOME/.local/bin}"
 mkdir -p "$BIN"

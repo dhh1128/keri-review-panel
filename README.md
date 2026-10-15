@@ -14,7 +14,6 @@ PKI / IAM / OAuth / blockchain / SD-JWT priors.
 | `review-house-style.md` | **Disposition spine.** The adversarial epistemics every persona shares (resist sycophancy, earn findings, no fence-sitting, steelman-before-you-strike). |
 | `orchestrating-reviews.md` | **Output contract.** Severity (adoption-obligation) and confidence semantics, `dedupe_key` convention, id prefixes, the re-anchoring rule, the findings manifest schema, and the synthesis contract. |
 | `personas/*.md` | The eight reviewer lenses (below). |
-| `freshness.sh` | Re-anchoring / staleness checker — greps each doctrine quote against live sources; fail-loud on drift. |
 | `cli/` | The runner (`keri-review-panel run`): fetch and snapshot the proposal → (optionally dispatch lenses) → review → merge and dedupe → verify → synthesize → persist, with `codex` and `claude` backends. |
 | `skill/SKILL.md` | The skill Claude Code, Codex and Copilot CLI load; it starts the runner and reports the result. |
 | `DESIGN.md` | Why the runner is shaped as it is, what was decided and rejected, and what is unverified. |
@@ -68,10 +67,13 @@ When a target is a keripy checkout, SEC also reads that checkout's `ref/ErrorHan
 
 ## Two durability guarantees
 
-1. **Citations re-anchor at review time.** `keri-doctrine.md` line numbers are hints verified at a
-   fixed commit (stamped in the file); personas re-grep the *live* source they are pointed at and
-   cite the current line/symbol, so panel *findings* never inherit the doctrine's citation rot. Run
-   `./freshness.sh` to see which doctrine quotes have drifted.
+1. **Citations re-anchor at review time.** Line numbers in the doctrine and the bible are hints
+   verified at a fixed commit; personas re-grep the *live* source they are pointed at and
+   cite the current line/symbol, so panel *findings* never inherit the doctrine's citation rot. Quote
+   drift is checked upstream, by keri-bible's `refresh/freshness.py` (source roots from its
+   `refresh/sources.yaml`); point it at this repo's files to check them, e.g.
+   `~/code/me/keri-bible/refresh/freshness.py personas/*.md`. This repo's `freshness.sh` was retired
+   on 2026-10-15 in its favor.
 2. **The doctrine is regenerable.** `reference/` holds the full bible and the per-source mining
    notes it was built from (in the sibling `keri-bible` workspace), so the doctrine can be refreshed
    against a newer spec/code baseline.
