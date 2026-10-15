@@ -1,5 +1,5 @@
 source:  keri-bible
-commit:  75e33c8
-date:    2026-09-21
-subject: Record Sam Smith's "super = scope" framing and the discovery-layer shibboleth
+commit:  a78391a
+date:    2026-10-15
+subject: Merge sources: consolidate the source manifest and teach freshness and detect the new formats
 path:    /home/daniel/code/me/keri-bible
